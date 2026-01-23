@@ -1,5 +1,6 @@
 package com.cipher.studio.presentation.cyberhouse
 
+import androidx.compose.foundation.BorderStroke // FIXED: Added Import
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,7 +30,6 @@ fun CyberHouseScreen(
 ) {
     val isDark = theme == Theme.DARK
     
-    // States
     val mode by viewModel.mode.collectAsState()
     val activeAiTool by viewModel.activeAiTool.collectAsState()
     val aiInputData by viewModel.aiInputData.collectAsState()
@@ -40,9 +40,8 @@ fun CyberHouseScreen(
     val utilInput by viewModel.utilInput.collectAsState()
     val utilOutput by viewModel.utilOutput.collectAsState()
 
-    // Colors (Hacker Theme)
     val bgColor = if (isDark) Color(0xFF050505) else Color(0xFFF9FAFB)
-    val textColor = if (isDark) Color(0xFF22C55E) else Color(0xFF111827) // Green-500 or Gray-900
+    val textColor = if (isDark) Color(0xFF22C55E) else Color(0xFF111827)
     val borderColor = if (isDark) Color(0xFF22C55E).copy(0.3f) else Color.Gray.copy(0.3f)
     val panelBg = if (isDark) Color.Black else Color.White
 
@@ -52,7 +51,6 @@ fun CyberHouseScreen(
             .background(bgColor)
             .padding(16.dp)
     ) {
-        // --- Header ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -84,12 +82,11 @@ fun CyberHouseScreen(
                 Text(
                     text = "Advanced Security Operations & Red Teaming Console.",
                     fontSize = 12.sp,
-                    color = if (isDark) Color.Gray else Color.Gray,
+                    color = Color.Gray,
                     fontFamily = FontFamily.Monospace
                 )
             }
 
-            // Mode Switcher
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -129,12 +126,9 @@ fun CyberHouseScreen(
             }
         }
 
-        // --- AI MODE ---
         if (mode == ToolMode.AI) {
             Row(modifier = Modifier.weight(1f)) {
-                // Left: Input & Tools
                 Column(modifier = Modifier.weight(0.35f).fillMaxHeight()) {
-                    // Tool Selector
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AiTool.values().forEach { tool ->
                             val isSelected = activeAiTool == tool
@@ -176,7 +170,6 @@ fun CyberHouseScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Input Area
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -219,7 +212,6 @@ fun CyberHouseScreen(
                             textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                         )
 
-                        // Execute Button
                         Button(
                             onClick = { viewModel.runAiTool() },
                             enabled = aiInputData.isNotEmpty() && !isProcessing,
@@ -243,7 +235,6 @@ fun CyberHouseScreen(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Right: Output
                 Column(
                     modifier = Modifier
                         .weight(0.65f)
@@ -251,7 +242,6 @@ fun CyberHouseScreen(
                         .border(1.dp, borderColor, RoundedCornerShape(4.dp))
                         .background(if (isDark) Color(0xFF050505) else Color.White)
                 ) {
-                    // Simple Matrix effect background could go here if using Canvas
                     Box(modifier = Modifier.weight(1f).padding(16.dp)) {
                         val scrollState = rememberScrollState()
                         if (aiOutput.isNotEmpty()) {
@@ -277,10 +267,8 @@ fun CyberHouseScreen(
             }
         }
 
-        // --- UTILITY MODE ---
         if (mode == ToolMode.UTILITY) {
             Column(modifier = Modifier.weight(1f)) {
-                // Tool Select
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     UtilityTool.values().forEach { tool ->
                         val isSelected = activeUtilTool == tool
@@ -303,7 +291,6 @@ fun CyberHouseScreen(
                 }
 
                 Row(modifier = Modifier.weight(1f)) {
-                    // Input
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -334,7 +321,6 @@ fun CyberHouseScreen(
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    // Output
                     Column(
                         modifier = Modifier
                             .weight(1f)
