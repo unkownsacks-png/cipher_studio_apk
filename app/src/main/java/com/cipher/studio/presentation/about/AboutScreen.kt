@@ -27,12 +27,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle // Added Import
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -42,9 +41,6 @@ import com.cipher.studio.domain.model.Theme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.Random
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -53,36 +49,21 @@ fun AboutScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    
-    // Tilt State
     var rotateX by remember { mutableStateOf(0f) }
     var rotateY by remember { mutableStateOf(0f) }
     var size by remember { mutableStateOf(IntSize.Zero) }
-
-    // --- Feature 1: Warp Speed Background Logic ---
-    // Using a simple Canvas animation loop
-    val infiniteTransition = rememberInfiniteTransition()
-    val time by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
-    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .onGloballyPositioned { size = it.size }
-            // Capture touch for 3D Tilt Effect
             .pointerInteropFilter { event ->
                 when (event.action) {
                     MotionEvent.ACTION_MOVE -> {
                         val x = event.x - size.width / 2
                         val y = event.y - size.height / 2
-                        rotateY = (x / (size.width / 2)) * 10f // Max 10 degrees
+                        rotateY = (x / (size.width / 2)) * 10f
                         rotateX = (y / (size.height / 2)) * -10f
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -93,13 +74,8 @@ fun AboutScreen(
                 true
             }
     ) {
-        // 1. Warp Speed Background
         WarpSpeedBackground()
 
-        // 2. Floating Runes (Simplified as random text)
-        FloatingRunes()
-
-        // 3. Return Button
         Button(
             onClick = onBack,
             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
@@ -113,12 +89,11 @@ fun AboutScreen(
             Text("SYSTEM RETURN", color = Color(0xFF4ADE80), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
         }
 
-        // 4. Main Holographic Card (3D Tilt Container)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth(0.9f)
-                .aspectRatio(0.8f) // Card aspect ratio
+                .aspectRatio(0.8f)
                 .graphicsLayer {
                     rotationX = rotateX
                     rotationY = rotateY
@@ -126,9 +101,7 @@ fun AboutScreen(
                 }
                 .background(Color.Black.copy(0.6f), RoundedCornerShape(24.dp))
                 .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(24.dp))
-                //.blur(if (android.os.Build.VERSION.SDK_INT >= 31) 20.dp else 0.dp) // Blur requires S+
         ) {
-            // Inner Content
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -136,7 +109,6 @@ fun AboutScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Logo with Spin
                 Box(modifier = Modifier.size(100.dp)) {
                     val rotation = remember { Animatable(0f) }
                     LaunchedEffect(Unit) {
@@ -153,7 +125,6 @@ fun AboutScreen(
                             .graphicsLayer { rotationZ = rotation.value }
                     )
                     
-                    // Center Logo
                     Box(
                         modifier = Modifier
                             .size(80.dp)
@@ -166,7 +137,7 @@ fun AboutScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Code, // Placeholder for Cipher Logo
+                            imageVector = Icons.Default.Code,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(40.dp)
@@ -176,7 +147,6 @@ fun AboutScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Text Scramble Effect
                 var scrambledText by remember { mutableStateOf("CIPHER ATTACK") }
                 LaunchedEffect(Unit) {
                     val target = "CIPHER ATTACK"
@@ -188,12 +158,15 @@ fun AboutScreen(
                     scrambledText = target
                 }
 
+                // FIXED: Used style = TextStyle(brush = ...) instead of passing brush to Text
                 Text(
                     text = scrambledText,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Black,
-                    brush = Brush.verticalGradient(listOf(Color.White, Color.Gray)),
-                    style = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
+                    style = TextStyle(
+                        brush = Brush.verticalGradient(listOf(Color.White, Color.Gray)),
+                        fontFamily = FontFamily.Monospace
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -221,7 +194,6 @@ fun AboutScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Social Shards Row
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -233,20 +205,16 @@ fun AboutScreen(
                 }
             }
             
-            // Scanline Effect Overlay
             ScanLine()
         }
     }
 }
-
-// --- Components ---
 
 @Composable
 fun SocialShard(label: String, url: String, color: Color) {
     val context = LocalContext.current
     var isShattered by remember { mutableStateOf(false) }
     
-    // Shatter Animation logic would go here, simpler version:
     val scale by animateFloatAsState(targetValue = if (isShattered) 1.2f else 1f)
     val alpha by animateFloatAsState(targetValue = if (isShattered) 0f else 1f)
 
@@ -264,7 +232,6 @@ fun SocialShard(label: String, url: String, color: Color) {
                 isShattered = true
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 context.startActivity(intent)
-                // Reset after delay handled by LaunchedEffect in real app
             },
         contentAlignment = Alignment.Center
     ) {
@@ -285,7 +252,7 @@ fun WarpSpeedBackground() {
         val cy = size.height / 2
         
         stars.forEach { star ->
-            star.z -= 0.01f // Speed
+            star.z -= 0.01f
             if (star.z <= 0) {
                 star.z = 1f
                 star.x = (Math.random() * 2 - 1).toFloat()
@@ -306,7 +273,6 @@ fun WarpSpeedBackground() {
         }
     }
     
-    // Force recomposition loop
     LaunchedEffect(Unit) {
         while (isActive) {
             withFrameMillis { }
@@ -315,11 +281,6 @@ fun WarpSpeedBackground() {
 }
 
 class Star(var x: Float, var y: Float, var z: Float)
-
-@Composable
-fun FloatingRunes() {
-    // Simplified: Just static random chars for now, animating text in Canvas is complex
-}
 
 @Composable
 fun ScanLine() {
