@@ -54,12 +54,17 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    implementation(platform("androidx.compose:compose-bom:2023.08.00"))
+    
+    // አስፈላጊ ለውጥ: BOM ወደ 2024.02.01 ተቀይሯል (ለ HorizontalDivider እንዲሰራ)
+    implementation(platform("androidx.compose:compose-bom:2024.02.01"))
+    
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended") // For all icons
+    
+    // አስፈላጊ ለውጥ: Icons Version 1.6.0 (ለ AutoMirrored እንዲሰራ)
+    implementation("androidx.compose.material:material-icons-extended:1.6.0")
 
     // Dependency Injection (Hilt)
     implementation("com.google.dagger:hilt-android:2.48")
@@ -72,20 +77,17 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
 
-    // Google Generative AI (Gemini)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // አስፈላጊ ለውጥ: Gemini Version 0.1.2 (ኮድህ ከዚህ ስሪት ጋር ስለሚጣጣም)
+    implementation("com.google.ai.client.generativeai:generativeai:0.1.2")
 
     // Image Loading (Coil)
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Markdown Rendering (Optional - if we strictly use custom parser, this isn't needed, but good to have)
-    // implementation("com.github.jeziellago:compose-markdown:0.3.7") 
 
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2023.08.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
