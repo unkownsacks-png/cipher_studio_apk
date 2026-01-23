@@ -39,14 +39,12 @@ fun VisionHubScreen(
     val result by viewModel.result.collectAsState()
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
 
-    // Gallery Launcher
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { viewModel.onImageSelected(it) }
     }
 
-    // Colors
     val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC)
     val textColor = if (isDark) Color.White else Color.Black
     val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
@@ -58,9 +56,9 @@ fun VisionHubScreen(
             .padding(16.dp)
             .background(bgColor)
     ) {
-        // Header
+        // --- Header ---
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
-            Icon(Icons.Default.Visibility, "Vision", tint = Color(0xFFA855F7), modifier = Modifier.size(28.dp)) // Purple
+            Icon(Icons.Default.Visibility, "Vision", tint = Color(0xFFA855F7), modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text("Vision Hub", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
@@ -69,9 +67,10 @@ fun VisionHubScreen(
         }
 
         Row(modifier = Modifier.weight(1f)) {
-            // --- LEFT COLUMN: Upload & Actions ---
+            // --- LEFT COLUMN: Upload & Preview ---
             Column(modifier = Modifier.weight(0.4f).fillMaxHeight()) {
-                // Image Placeholder / Preview
+                
+                // Image Container (Optimized for Visibility)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -79,7 +78,7 @@ fun VisionHubScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .border(2.dp, if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.3f), RoundedCornerShape(16.dp))
                         .clickable { launcher.launch("image/*") }
-                        .background(if (isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f)),
+                        .background(Color.Black), // Always black bg for images looks better
                     contentAlignment = Alignment.Center
                 ) {
                     if (selectedImage != null) {
@@ -91,7 +90,7 @@ fun VisionHubScreen(
                             bitmap = bitmap,
                             contentDescription = "Uploaded Image",
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
+                            contentScale = ContentScale.Fit // FIXED: Ensures entire image is visible
                         )
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -104,50 +103,22 @@ fun VisionHubScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action Buttons Grid
+                // Action Grid
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        VisionActionButton(
-                            text = "Describe",
-                            icon = Icons.Default.Image,
-                            color = Color(0xFF3B82F6), // Blue
-                            isEnabled = selectedImage != null && !isAnalyzing,
-                            onClick = { viewModel.analyzeImage(VisionMode.DESCRIBE) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        VisionActionButton(
-                            text = "OCR Text",
-                            icon = Icons.Default.Description, // ScanText equiv
-                            color = Color(0xFF22C55E), // Green
-                            isEnabled = selectedImage != null && !isAnalyzing,
-                            onClick = { viewModel.analyzeImage(VisionMode.EXTRACT) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        VisionActionButton("Describe", Icons.Default.Image, Color(0xFF3B82F6), selectedImage != null && !isAnalyzing, { viewModel.analyzeImage(VisionMode.DESCRIBE) }, Modifier.weight(1f))
+                        VisionActionButton("OCR Text", Icons.Default.Description, Color(0xFF22C55E), selectedImage != null && !isAnalyzing, { viewModel.analyzeImage(VisionMode.EXTRACT) }, Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        VisionActionButton(
-                            text = "Code Ext.",
-                            icon = Icons.Default.Code,
-                            color = Color(0xFFF97316), // Orange
-                            isEnabled = selectedImage != null && !isAnalyzing,
-                            onClick = { viewModel.analyzeImage(VisionMode.CODE) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        VisionActionButton(
-                            text = "Threat Detect",
-                            icon = Icons.Default.Security, // ShieldAlert equiv
-                            color = Color(0xFFEF4444), // Red
-                            isEnabled = selectedImage != null && !isAnalyzing,
-                            onClick = { viewModel.analyzeImage(VisionMode.THREAT) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        VisionActionButton("Code Ext.", Icons.Default.Code, Color(0xFFF97316), selectedImage != null && !isAnalyzing, { viewModel.analyzeImage(VisionMode.CODE) }, Modifier.weight(1f))
+                        VisionActionButton("Threat Detect", Icons.Default.Security, Color(0xFFEF4444), selectedImage != null && !isAnalyzing, { viewModel.analyzeImage(VisionMode.THREAT) }, Modifier.weight(1f))
                     }
                 }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // --- RIGHT COLUMN: Result Area ---
+            // --- RIGHT COLUMN: Results ---
             Column(
                 modifier = Modifier
                     .weight(0.6f)
@@ -156,7 +127,7 @@ fun VisionHubScreen(
                     .border(1.dp, borderColor, RoundedCornerShape(16.dp))
                     .background(cardBg)
             ) {
-                // Header
+                // Result Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -174,7 +145,9 @@ fun VisionHubScreen(
                     )
                 }
 
-                // Content
+                Divider(color = borderColor, thickness = 1.dp)
+
+                // Result Content (Scrollable)
                 Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
                     if (isAnalyzing) {
                         Column(
@@ -187,6 +160,7 @@ fun VisionHubScreen(
                         }
                     } else if (result.isNotEmpty()) {
                         val scrollState = rememberScrollState()
+                        // Using a simple Text for now, could be MarkdownRenderer if imported
                         Text(
                             text = result,
                             color = textColor,
