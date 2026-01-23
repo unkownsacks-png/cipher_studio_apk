@@ -1,6 +1,6 @@
 package com.cipher.studio.presentation.cyberhouse
 
-import androidx.compose.foundation.BorderStroke // FIXED: Added Import
+import androidx.compose.foundation.BorderStroke // ADDED THIS IMPORT
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
