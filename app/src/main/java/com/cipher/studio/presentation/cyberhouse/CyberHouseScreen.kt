@@ -1,6 +1,6 @@
 package com.cipher.studio.presentation.cyberhouse
 
-import androidx.compose.foundation.BorderStroke // ADDED THIS IMPORT
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,8 +40,9 @@ fun CyberHouseScreen(
     val utilInput by viewModel.utilInput.collectAsState()
     val utilOutput by viewModel.utilOutput.collectAsState()
 
+    // Hacker Theme Colors
     val bgColor = if (isDark) Color(0xFF050505) else Color(0xFFF9FAFB)
-    val textColor = if (isDark) Color(0xFF22C55E) else Color(0xFF111827)
+    val textColor = if (isDark) Color(0xFF22C55E) else Color(0xFF111827) // Green for hacker feel
     val borderColor = if (isDark) Color(0xFF22C55E).copy(0.3f) else Color.Gray.copy(0.3f)
     val panelBg = if (isDark) Color.Black else Color.White
 
@@ -51,6 +52,7 @@ fun CyberHouseScreen(
             .background(bgColor)
             .padding(16.dp)
     ) {
+        // --- Header ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -69,6 +71,7 @@ fun CyberHouseScreen(
                         letterSpacing = 2.sp
                     )
                     Spacer(modifier = Modifier.width(8.dp))
+                    // Root Access Badge
                     Text(
                         text = "ROOT ACCESS",
                         fontSize = 10.sp,
@@ -87,6 +90,7 @@ fun CyberHouseScreen(
                 )
             }
 
+            // Mode Switcher
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -126,9 +130,12 @@ fun CyberHouseScreen(
             }
         }
 
+        // --- AI MODE ---
         if (mode == ToolMode.AI) {
             Row(modifier = Modifier.weight(1f)) {
+                // LEFT: Input & Tools
                 Column(modifier = Modifier.weight(0.35f).fillMaxHeight()) {
+                    // Tool Selection
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AiTool.values().forEach { tool ->
                             val isSelected = activeAiTool == tool
@@ -170,6 +177,7 @@ fun CyberHouseScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Input Box
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -235,6 +243,7 @@ fun CyberHouseScreen(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
+                // RIGHT: Output Console
                 Column(
                     modifier = Modifier
                         .weight(0.65f)
@@ -267,9 +276,13 @@ fun CyberHouseScreen(
             }
         }
 
+        // --- UTILITY MODE ---
         if (mode == ToolMode.UTILITY) {
+            // (Layout similar to AI mode but for Utils - kept simple for brevity as structure is same)
             Column(modifier = Modifier.weight(1f)) {
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // ... Utility Buttons and Input/Output Split ...
+                // Reusing structure for consistent look
+                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     UtilityTool.values().forEach { tool ->
                         val isSelected = activeUtilTool == tool
                         Button(
@@ -297,54 +310,30 @@ fun CyberHouseScreen(
                             .border(1.dp, borderColor, RoundedCornerShape(4.dp))
                             .background(panelBg)
                     ) {
-                        Text(
-                            text = "INPUT STRING",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(8.dp)
-                        )
+                        Text("INPUT STRING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(8.dp))
                         TextField(
                             value = utilInput,
                             onValueChange = { viewModel.updateUtilInput(it) },
                             placeholder = { Text("Type here...", fontFamily = FontFamily.Monospace, fontSize = 12.sp) },
                             modifier = Modifier.fillMaxSize(),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = textColor,
-                                unfocusedTextColor = textColor
-                            ),
+                            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
                             textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace)
                         )
                     }
-
                     Spacer(modifier = Modifier.width(16.dp))
-
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .border(1.dp, borderColor, RoundedCornerShape(4.dp))
                             .background(if (isDark) Color(0xFF050505) else Color(0xFFF9FAFB))
                     ) {
-                        Text(
-                            text = "PROCESSED OUTPUT",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(8.dp)
-                        )
+                        Text("PROCESSED OUTPUT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(8.dp))
                         TextField(
                             value = utilOutput,
                             onValueChange = {},
                             readOnly = true,
                             modifier = Modifier.fillMaxSize(),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = textColor,
-                                unfocusedTextColor = textColor
-                            ),
+                            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
                             textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace)
                         )
                     }
