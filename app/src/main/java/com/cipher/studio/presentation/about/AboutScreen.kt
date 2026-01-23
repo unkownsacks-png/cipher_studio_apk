@@ -31,7 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle // Added Import
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -158,7 +158,6 @@ fun AboutScreen(
                     scrambledText = target
                 }
 
-                // FIXED: Used style = TextStyle(brush = ...) instead of passing brush to Text
                 Text(
                     text = scrambledText,
                     fontSize = 32.sp,
