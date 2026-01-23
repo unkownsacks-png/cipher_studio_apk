@@ -1,6 +1,12 @@
 package com.cipher.studio.presentation.main
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -18,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,157 +33,239 @@ import com.cipher.studio.domain.model.ChatMessage
 import com.cipher.studio.domain.model.ChatRole
 import com.cipher.studio.domain.model.Theme
 import com.cipher.studio.domain.model.ViewMode
+import com.cipher.studio.presentation.about.AboutScreen
 import com.cipher.studio.presentation.auth.EliteAuthScreen
+import com.cipher.studio.presentation.codelab.CodeLabScreen
+import com.cipher.studio.presentation.components.ChatMessageItem
+import com.cipher.studio.presentation.components.ControlPanel
 import com.cipher.studio.presentation.components.Sidebar
+import com.cipher.studio.presentation.cyberhouse.CyberHouseScreen
+import com.cipher.studio.presentation.dataanalyst.DataAnalystScreen
+import com.cipher.studio.presentation.docintel.DocIntelScreen
+import com.cipher.studio.presentation.prompt.PromptStudioScreen
+import com.cipher.studio.presentation.visionhub.VisionHubScreen
 
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val isAuthorized by viewModel.isAuthorized.collectAsState()
-    
-    // Auth Check: If not authorized, show EliteAuthScreen
+
+    // 1. ELITE AUTH CHECK (The Gatekeeper)
     if (!isAuthorized) {
         EliteAuthScreen(onLoginSuccess = { viewModel.setAuthorized(true) })
     } else {
-        AppContent(viewModel)
+        // 2. THE MAIN APP SYSTEM
+        CipherAppSystem(viewModel)
     }
 }
 
 @Composable
-fun AppContent(viewModel: MainViewModel) {
+fun CipherAppSystem(viewModel: MainViewModel) {
+    // Collect States
     val theme by viewModel.theme.collectAsState()
     val isDark = theme == Theme.DARK
     val currentView by viewModel.currentView.collectAsState()
     val isSidebarOpen by viewModel.isSidebarOpen.collectAsState()
+    val config by viewModel.config.collectAsState()
     
-    // Session State
+    // Session States
     val sessions by viewModel.sessions.collectAsState()
     val currentSessionId by viewModel.currentSessionId.collectAsState()
     
-    // Dynamic Background Colors based on Theme
+    // UI State for Control Panel
+    var isControlsOpen by remember { mutableStateOf(false) }
+
+    // Dynamic Background Colors
     val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC)
 
-    Row(
+    // Handle Back Press to close Sidebar/Panels first
+    BackHandler(enabled = isSidebarOpen || isControlsOpen) {
+        if (isControlsOpen) isControlsOpen = false
+        else if (isSidebarOpen) viewModel.toggleSidebar()
+    }
+
+    // --- ROOT LAYOUT (Allows Overlays) ---
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
     ) {
-        // --- SIDEBAR INTEGRATION ---
-        // This connects the logic from MainViewModel to the Sidebar UI
-        Sidebar(
-            sessions = sessions,
-            currentSessionId = currentSessionId,
-            onSelectSession = { sessionId ->
-                // Find the session object by ID and load it
-                val sessionToLoad = sessions.find { it.id == sessionId }
-                if (sessionToLoad != null) {
-                    viewModel.loadSession(sessionToLoad)
-                }
-            },
-            onNewSession = { viewModel.createNewSession() },
-            onDeleteSession = { sessionId ->
-                // Note: Ensure deleteSession is implemented in ViewModel
-                // viewModel.deleteSession(sessionId) 
-            },
-            isOpen = isSidebarOpen,
-            onToggleSidebar = { viewModel.toggleSidebar() },
-            theme = theme,
-            currentView = currentView,
-            onViewChange = { mode -> viewModel.setViewMode(mode) },
-            onLogout = { viewModel.setAuthorized(false) }
-        )
-
-        // --- MAIN CONTENT AREA ---
-        Column(
-            modifier = Modifier
-                .weight(1f) // Takes remaining width
-                .fillMaxHeight()
-                .padding(12.dp)
-        ) {
-            // Header
-            AppHeader(
-                isDark = isDark,
+        
+        // --- MAIN CONTENT ROW ---
+        Row(modifier = Modifier.fillMaxSize()) {
+            
+            // A. SIDEBAR NAVIGATION
+            Sidebar(
+                sessions = sessions,
+                currentSessionId = currentSessionId,
+                onSelectSession = { sessionId ->
+                    val session = sessions.find { it.id == sessionId }
+                    if (session != null) viewModel.loadSession(session)
+                },
+                onNewSession = { viewModel.createNewSession() },
+                onDeleteSession = { /* Implement delete in VM if needed */ },
+                isOpen = isSidebarOpen,
+                onToggleSidebar = { viewModel.toggleSidebar() },
+                theme = theme,
                 currentView = currentView,
-                onToggleSidebar = { viewModel.toggleSidebar() }
+                onViewChange = { viewModel.setViewMode(it) },
+                onLogout = { viewModel.setAuthorized(false) }
             )
 
-            // Dynamic View Switcher
-            Box(modifier = Modifier.weight(1f)) {
-                when (currentView) {
-                    ViewMode.CHAT -> ChatView(viewModel, isDark)
-                    ViewMode.CODE_LAB -> PlaceholderView("Code Lab")
-                    ViewMode.PROMPT_STUDIO -> PlaceholderView("Prompt Studio")
-                    ViewMode.VISION_HUB -> PlaceholderView("Vision Hub")
-                    ViewMode.DATA_ANALYST -> PlaceholderView("Data Analyst")
-                    ViewMode.DOC_INTEL -> PlaceholderView("Doc Intel")
-                    ViewMode.CYBER_HOUSE -> PlaceholderView("Cyber House")
-                    ViewMode.ABOUT -> PlaceholderView("About Developer")
+            // B. WORKSPACE AREA
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+            ) {
+                // 1. Header
+                AppHeader(
+                    isDark = isDark,
+                    currentView = currentView,
+                    onToggleSidebar = { viewModel.toggleSidebar() },
+                    onToggleControls = { isControlsOpen = !isControlsOpen }
+                )
+
+                // 2. Dynamic Module Switcher
+                // This is the heart that swaps screens based on selection
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    when (currentView) {
+                        ViewMode.CHAT -> ChatView(viewModel, isDark)
+                        
+                        ViewMode.CODE_LAB -> CodeLabScreen(theme = theme)
+                        
+                        ViewMode.VISION_HUB -> VisionHubScreen(theme = theme)
+                        
+                        ViewMode.PROMPT_STUDIO -> PromptStudioScreen(
+                            theme = theme,
+                            onUsePrompt = { prompt ->
+                                viewModel.updatePrompt(prompt)
+                                viewModel.setViewMode(ViewMode.CHAT)
+                            }
+                        )
+                        
+                        ViewMode.CYBER_HOUSE -> CyberHouseScreen(theme = theme)
+                        
+                        ViewMode.DATA_ANALYST -> DataAnalystScreen(theme = theme)
+                        
+                        ViewMode.DOC_INTEL -> DocIntelScreen(theme = theme)
+                        
+                        ViewMode.ABOUT -> AboutScreen(
+                            theme = theme,
+                            onBack = { viewModel.setViewMode(ViewMode.CHAT) }
+                        )
+                    }
                 }
             }
         }
+
+        // --- C. CONTROL PANEL OVERLAY ---
+        // Slides in from the right side
+        ControlPanel(
+            config = config,
+            onChange = { /* Update config in VM (need to add setConfig in VM) */ },
+            isOpen = isControlsOpen,
+            onClose = { isControlsOpen = false },
+            theme = theme
+        )
     }
 }
 
+// --- SUB-COMPONENT: HEADER ---
 @Composable
-fun AppHeader(isDark: Boolean, currentView: ViewMode, onToggleSidebar: () -> Unit) {
+fun AppHeader(
+    isDark: Boolean,
+    currentView: ViewMode,
+    onToggleSidebar: () -> Unit,
+    onToggleControls: () -> Unit
+) {
     val glassColor = if (isDark) Color(0x1AFFFFFF) else Color(0xCCFFFFFF)
-    
+    val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Black.copy(0.1f)
+    val iconColor = if (isDark) Color.White else Color.Black
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(glassColor)
-            .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        // Left: Menu & Title
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Sidebar Toggle Button (Visible on all screens in native logic)
             IconButton(onClick = onToggleSidebar) {
-                Icon(Icons.Default.Menu, "Menu", tint = if (isDark) Color.White else Color.Black)
+                Icon(Icons.Default.Menu, "Menu", tint = iconColor)
             }
             Spacer(modifier = Modifier.width(8.dp))
             
-            // View Title
-            Text(
-                text = currentView.name.replace("_", " "),
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2563EB), // Blue Primary
-                fontSize = 14.sp
-            )
+            // View Badge
+            Surface(
+                color = if(isDark) Color(0xFF1E293B) else Color(0xFFEFF6FF),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(0.3f))
+            ) {
+                Text(
+                    text = currentView.name.replace("_", " "),
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF3B82F6),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
         
-        // Elite Status Badge
-        Row(
-            modifier = Modifier
-                .background(Color(0x1A10B981), CircleShape)
-                .border(1.dp, Color(0x3310B981), CircleShape)
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.size(8.dp).background(Color(0xFF10B981), CircleShape))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "ELITE ACTIVE", 
-                fontSize = 10.sp, 
-                fontWeight = FontWeight.Black, 
-                color = Color(0xFF10B981)
-            )
+        // Right: Elite Status & Settings
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Elite Badge
+            Row(
+                modifier = Modifier
+                    .background(Color(0x1A10B981), CircleShape)
+                    .border(1.dp, Color(0x3310B981), CircleShape)
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.size(6.dp).background(Color(0xFF10B981), CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "ELITE ACTIVE", 
+                    fontSize = 10.sp, 
+                    fontWeight = FontWeight.Black, 
+                    color = Color(0xFF10B981)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Settings Button
+            IconButton(onClick = onToggleControls) {
+                Icon(Icons.Default.Tune, "Settings", tint = iconColor)
+            }
         }
     }
 }
 
+// --- SUB-COMPONENT: CHAT VIEW (The Core) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
     val prompt by viewModel.prompt.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
+    val attachments by viewModel.attachments.collectAsState() // Assumed available in VM
+    
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
-    // Auto Scroll to bottom when history changes or streaming updates
+    // Auto Scroll Logic
     LaunchedEffect(history.size, isStreaming) {
         if (history.isNotEmpty()) {
             listState.animateScrollToItem(history.size - 1)
@@ -184,29 +273,39 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Chat History List
+        
+        // 1. CHAT LIST AREA
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp),
             contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             if (history.isEmpty()) {
                 item { EmptyState(isDark) }
             } else {
                 items(history) { message ->
-                    ChatMessageItem(message, isDark)
+                    ChatMessageItem(
+                        msg = message,
+                        isDark = isDark,
+                        isStreaming = isStreaming && message == history.last() && message.role == ChatRole.MODEL,
+                        onSpeak = { text -> viewModel.speakText(text) },
+                        onPin = { id -> viewModel.togglePin(id) }
+                    )
                 }
             }
             
             if (isStreaming) {
                 item { StreamingIndicator() }
             }
+            
+            // Spacer for input area
+            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
 
-        // Input Area (3D Glassmorphism Look)
+        // 2. INPUT AREA (Glassmorphism 3D)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -214,24 +313,35 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.95f)
+                    .fillMaxWidth(0.98f)
                     .align(Alignment.Center)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(if (isDark) Color(0x33000000) else Color(0xCCFFFFFF))
-                    .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(32.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(if (isDark) Color(0xFF0F172A).copy(0.9f) else Color.White.copy(0.9f))
+                    .border(1.dp, if(isDark) Color.White.copy(0.1f) else Color.Black.copy(0.1f), RoundedCornerShape(24.dp))
                     .padding(8.dp)
             ) {
+                // Attachments Preview
+                if (attachments.isNotEmpty()) {
+                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text(
+                            text = "${attachments.size} Image(s) attached",
+                            fontSize = 12.sp,
+                            color = Color(0xFF3B82F6)
+                        )
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.Bottom) {
-                    // File Upload Button (Placeholder logic)
-                    IconButton(onClick = { /* Implement File Upload */ }) {
-                        Icon(Icons.Default.Image, "Upload", tint = Color.Gray)
+                    // File Upload
+                    IconButton(onClick = { /* Implement File Picker in VM */ }) {
+                        Icon(Icons.Default.AddPhotoAlternate, "Upload", tint = Color.Gray)
                     }
                     
-                    // Text Input
+                    // Text Field
                     TextField(
                         value = prompt,
                         onValueChange = { viewModel.updatePrompt(it) },
-                        placeholder = { Text("Ask anything...", fontSize = 14.sp) },
+                        placeholder = { Text("Ask Cipher Omni-Mind...", fontSize = 14.sp, color = Color.Gray) },
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 4.dp),
@@ -243,25 +353,30 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                             focusedTextColor = if (isDark) Color.White else Color.Black,
                             unfocusedTextColor = if (isDark) Color.White else Color.Black
                         ),
-                        maxLines = 4
+                        maxLines = 5
                     )
 
                     // Send / Stop Button
                     IconButton(
                         onClick = { viewModel.handleRun() },
-                        enabled = prompt.isNotBlank() || isStreaming,
+                        enabled = prompt.isNotBlank() || attachments.isNotEmpty() || isStreaming,
                         modifier = Modifier
+                            .padding(bottom = 4.dp)
                             .background(
                                 brush = Brush.linearGradient(
-                                    colors = listOf(Color(0xFF2563EB), Color(0xFF3B82F6))
+                                    colors = if (isStreaming) 
+                                        listOf(Color(0xFFEF4444), Color(0xFFDC2626)) // Red for Stop
+                                    else 
+                                        listOf(Color(0xFF2563EB), Color(0xFF3B82F6)) // Blue for Send
                                 ),
                                 shape = CircleShape
                             )
+                            .size(42.dp)
                     ) {
                         if (isStreaming) {
                             Icon(Icons.Default.Stop, "Stop", tint = Color.White)
                         } else {
-                            Icon(Icons.Default.Send, "Send", tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.ArrowUpward, "Send", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -270,77 +385,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     }
 }
 
-@Composable
-fun ChatMessageItem(message: ChatMessage, isDark: Boolean) {
-    val isUser = message.role == ChatRole.USER
-    val alignment = if (isUser) Alignment.End else Alignment.Start
-    val bubbleColor = if (isUser) Color(0xFF2563EB) else if (isDark) Color(0xFF1E293B) else Color.White
-    val textColor = if (isUser) Color.White else if (isDark) Color.White else Color.Black
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = alignment
-    ) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-            modifier = Modifier.fillMaxWidth(0.9f)
-        ) {
-            // Model Icon
-            if (!isUser) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(Color(0xFF2563EB), CircleShape)
-                        .padding(6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SmartToy,
-                        contentDescription = "Bot",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-
-            // Message Bubble
-            Column(
-                modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 20.dp,
-                            topEnd = 20.dp,
-                            bottomStart = if (isUser) 20.dp else 4.dp,
-                            bottomEnd = if (isUser) 4.dp else 20.dp
-                        )
-                    )
-                    .background(bubbleColor)
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = message.text,
-                    color = textColor,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
-                
-                // Grounding / Sources (If available)
-                if (message.groundingMetadata?.groundingChunks?.isNotEmpty() == true) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Sources available",
-                        fontSize = 10.sp,
-                        color = textColor.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
+// --- SUB-COMPONENT: EMPTY STATE ---
 @Composable
 fun EmptyState(isDark: Boolean) {
     Column(
@@ -348,18 +393,25 @@ fun EmptyState(isDark: Boolean) {
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 100.dp)
+            .padding(top = 80.dp)
     ) {
-        // Logo Placeholder with Glow
+        // Glowing Logo Placeholder
         Box(
-            modifier = Modifier.size(100.dp),
+            modifier = Modifier.size(120.dp),
             contentAlignment = Alignment.Center
         ) {
              Icon(
-                imageVector = Icons.Default.Hexagon,
+                imageVector = Icons.Default.Hexagon, // Placeholder for Cipher Logo
                 contentDescription = "Logo",
                 tint = Color(0xFF2563EB),
-                modifier = Modifier.size(80.dp)
+                modifier = Modifier.size(100.dp)
+             )
+             // Glow effect
+             Box(
+                 modifier = Modifier
+                     .size(100.dp)
+                     .background(Color(0xFF2563EB).copy(0.3f), CircleShape)
+                     .clip(CircleShape)
              )
         }
         
@@ -368,72 +420,63 @@ fun EmptyState(isDark: Boolean) {
         Text(
             text = "Cipher Studio",
             fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isDark) Color.White else Color.Black
+            fontWeight = FontWeight.Black,
+            color = if (isDark) Color.White else Color.Black,
+            letterSpacing = (-1).sp
         )
         
         Text(
             text = "Advanced reasoning. Beautifully designed.",
             color = Color.Gray,
-            fontSize = 14.sp
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Light
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(48.dp))
         
-        // Shortcut Hint
+        // Suggestion Chips
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SuggestionChip(text = "Analyze this code", isDark)
+            SuggestionChip(text = "Write a python script", isDark)
+        }
+    }
+}
+
+@Composable
+fun SuggestionChip(text: String, isDark: Boolean) {
+    Surface(
+        color = if(isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if(isDark) Color.White.copy(0.1f) else Color.Black.copy(0.1f))
+    ) {
         Text(
-            text = "Type and press Send to execute",
+            text = text,
             fontSize = 12.sp,
-            color = Color.Gray.copy(alpha = 0.5f),
-            modifier = Modifier
-                .background(
-                    if (isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f), 
-                    RoundedCornerShape(4.dp)
-                )
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+            color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
     }
 }
 
+// --- SUB-COMPONENT: STREAMING INDICATOR ---
 @Composable
 fun StreamingIndicator() {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 48.dp) // Align with bot text
+        modifier = Modifier.padding(start = 48.dp, bottom = 16.dp)
     ) {
         CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
             strokeWidth = 2.dp,
             color = Color(0xFF2563EB)
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "Processing...",
+            text = "Cipher Omni-Mind is thinking...",
             fontSize = 12.sp,
             color = Color.Gray,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp
         )
-    }
-}
-
-@Composable
-fun PlaceholderView(name: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = name,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Gray
-            )
-            Text(
-                text = "Under Construction",
-                fontSize = 14.sp,
-                color = Color.Gray.copy(alpha = 0.5f)
-            )
-        }
     }
 }
