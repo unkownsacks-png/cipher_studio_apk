@@ -8,8 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape // FIXED: Added Import
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
@@ -49,11 +49,12 @@ fun CodeLabScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
             .background(bgColor)
+            .padding(16.dp)
     ) {
+        // --- Header ---
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -71,6 +72,7 @@ fun CodeLabScreen(
                 )
             }
             
+            // View Mode Toggles
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -97,6 +99,7 @@ fun CodeLabScreen(
             }
         }
 
+        // --- Input Area ---
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             TextField(
                 value = prompt,
@@ -136,20 +139,23 @@ fun CodeLabScreen(
             }
         }
 
+        // --- Main Workspace (Code & Preview) ---
         Row(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
+            // 1. Code Editor Section
             if (viewMode == CodeLabViewMode.CODE || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f) // Takes 50% in Split, 100% in Code mode
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, borderColor, RoundedCornerShape(16.dp))
                         .background(if (isDark) Color(0xFF1E1E1E) else Color.White)
                 ) {
+                    // Mac-Style Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -164,9 +170,9 @@ fun CodeLabScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("index.html", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
                         }
-                        Text("Copy", fontSize = 12.sp, color = Color(0xFF2563EB), modifier = Modifier.clickable { })
                     }
 
+                    // Editor
                     Box(modifier = Modifier.padding(16.dp).weight(1f)) {
                         BasicTextField(
                             value = code,
@@ -175,7 +181,8 @@ fun CodeLabScreen(
                             textStyle = TextStyle(
                                 color = if (isDark) Color(0xFFD4D4D4) else Color(0xFF1F2937),
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp
                             ),
                             cursorBrush = SolidColor(textColor),
                             modifier = Modifier.fillMaxSize()
@@ -184,19 +191,22 @@ fun CodeLabScreen(
                 }
             }
 
+            // Split Spacer
             if (viewMode == CodeLabViewMode.SPLIT) {
                 Spacer(modifier = Modifier.width(16.dp))
             }
 
+            // 2. Live Preview Section
             if (viewMode == CodeLabViewMode.PREVIEW || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f) // Takes 50% in Split, 100% in Preview mode
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, borderColor, RoundedCornerShape(16.dp))
                         .background(Color.White)
                 ) {
+                    // Browser Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -209,15 +219,16 @@ fun CodeLabScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Web, "Preview", tint = Color.Gray, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Preview", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
+                            Text("Live Preview", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(modifier = Modifier.size(8.dp).background(Color(0xFFF87171), CircleShape))
-                            Box(modifier = Modifier.size(8.dp).background(Color(0xFFFACC15), CircleShape))
-                            Box(modifier = Modifier.size(8.dp).background(Color(0xFF4ADE80), CircleShape))
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFF87171), CircleShape))
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFFACC15), CircleShape))
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFF4ADE80), CircleShape))
                         }
                     }
 
+                    // WebView
                     if (code.isNotEmpty()) {
                         WebViewContainer(htmlContent = code)
                     } else {
@@ -251,6 +262,10 @@ fun WebViewContainer(htmlContent: String) {
                 webChromeClient = WebChromeClient()
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
             }
         },
         update = { webView ->
