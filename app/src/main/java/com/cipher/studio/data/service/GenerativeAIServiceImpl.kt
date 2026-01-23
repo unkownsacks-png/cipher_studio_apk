@@ -84,13 +84,13 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         """.trimIndent()
 
         // 2. Combine Instructions
-        val combinedSystemInstruction = "$DEEP_THINK_INSTRUCTION\n$timeContext\n\nUSER_REQUEST_CONTEXT: ${config.systemInstruction}"
+        val combinedSystemInstructions = "$DEEP_THINK_INSTRUCTION\n$timeContext\n\nUSER_REQUEST_CONTEXT: ${config.systemInstructions}"
 
         // 3. Configure Model with UNRESTRICTED Safety Settings
         val generativeModel = GenerativeModel(
             modelName = config.model.value,
             apiKey = apiKey,
-            systemInstruction = content { text(combinedSystemInstruction) },
+            systemInstructions = content { text(combinedSystemInstructions) },
             generationConfig = generationConfig {
                 temperature = config.temperature.toFloat()
                 topK = config.topK
@@ -153,9 +153,9 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             val candidates = chunk.candidates
             if (candidates.isNotEmpty()) {
                 val citation = candidates.first().citationMetadata
-                if (citation != null && citation.citationSources.isNotEmpty()) {
+                if (citation != null && citation.citations.isNotEmpty()) {
                     // Convert SDK Citation to our GroundingMetadata
-                    val groundingChunks = citation.citationSources.map { source ->
+                    val groundingChunks = citation.citations.map { source ->
                         GroundingChunk(
                             web = WebSource(
                                 uri = source.uri ?: "",
