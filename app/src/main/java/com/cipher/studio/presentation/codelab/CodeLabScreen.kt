@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape // FIXED: Added Import
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
@@ -41,8 +42,7 @@ fun CodeLabScreen(
     val isGenerating by viewModel.isGenerating.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
 
-    // Colors
-    val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC) // Matches MainScreen bg
+    val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC)
     val textColor = if (isDark) Color.White else Color.Black
     val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
 
@@ -52,7 +52,6 @@ fun CodeLabScreen(
             .padding(16.dp)
             .background(bgColor)
     ) {
-        // --- Header ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -72,7 +71,6 @@ fun CodeLabScreen(
                 )
             }
             
-            // View Toggle Buttons
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -89,7 +87,7 @@ fun CodeLabScreen(
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = mode.name, // CODE, PREVIEW, SPLIT
+                            text = mode.name,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = if (isSelected) textColor else Color.Gray
@@ -99,7 +97,6 @@ fun CodeLabScreen(
             }
         }
 
-        // --- Input Area ---
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             TextField(
                 value = prompt,
@@ -139,13 +136,11 @@ fun CodeLabScreen(
             }
         }
 
-        // --- Content Area (Split / Code / Preview) ---
         Row(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            // Code Editor Section
             if (viewMode == CodeLabViewMode.CODE || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
@@ -155,7 +150,6 @@ fun CodeLabScreen(
                         .border(1.dp, borderColor, RoundedCornerShape(16.dp))
                         .background(if (isDark) Color(0xFF1E1E1E) else Color.White)
                 ) {
-                    // Editor Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -170,11 +164,9 @@ fun CodeLabScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("index.html", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
                         }
-                        // Copy Button placeholder
-                        Text("Copy", fontSize = 12.sp, color = Color(0xFF2563EB), modifier = Modifier.clickable { /* Copy Logic */ })
+                        Text("Copy", fontSize = 12.sp, color = Color(0xFF2563EB), modifier = Modifier.clickable { })
                     }
 
-                    // Raw Code Text Area
                     Box(modifier = Modifier.padding(16.dp).weight(1f)) {
                         BasicTextField(
                             value = code,
@@ -196,7 +188,6 @@ fun CodeLabScreen(
                 Spacer(modifier = Modifier.width(16.dp))
             }
 
-            // Preview Section (WebView)
             if (viewMode == CodeLabViewMode.PREVIEW || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
@@ -204,9 +195,8 @@ fun CodeLabScreen(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-                        .background(Color.White) // Webview usually needs white/neutral bg
+                        .background(Color.White)
                 ) {
-                    // Preview Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -221,7 +211,6 @@ fun CodeLabScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Preview", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
                         }
-                        // Browser Dots
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Box(modifier = Modifier.size(8.dp).background(Color(0xFFF87171), CircleShape))
                             Box(modifier = Modifier.size(8.dp).background(Color(0xFFFACC15), CircleShape))
@@ -229,7 +218,6 @@ fun CodeLabScreen(
                         }
                     }
 
-                    // Live WebView
                     if (code.isNotEmpty()) {
                         WebViewContainer(htmlContent = code)
                     } else {
@@ -263,9 +251,6 @@ fun WebViewContainer(htmlContent: String) {
                 webChromeClient = WebChromeClient()
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
-                
-                // Security: Restrict file access if needed, but for generated code usually ok
-                // loadDataWithBaseURL needed for some CSS/JS to render properly
             }
         },
         update = { webView ->
