@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,7 +24,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,13 +31,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em // FIXED: Added Import for em
 import androidx.hilt.navigation.compose.hiltViewModel
 
 // Colors from your CSS
 val ColorBackgroundDark = Color(0xFF020617)
 val ColorGreenPrimary = Color(0xFF10b981)
 val ColorGreenLight = Color(0xFF34d399)
-val ColorCardBg = Color(0x4D0F172A) // rgba(15, 23, 42, 0.3)
+val ColorCardBg = Color(0x4D0F172A)
 val ColorTextWhite = Color(0xFFECFDF5)
 val ColorTextGray = Color(0xFF94A3B8)
 val ColorInputBg = Color(0x99020617)
@@ -56,14 +55,12 @@ fun EliteAuthScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isLoginSuccess by viewModel.loginSuccess.collectAsState()
 
-    // Handle Login Success
     LaunchedEffect(isLoginSuccess) {
         if (isLoginSuccess) {
             onLoginSuccess()
         }
     }
 
-    // Handle Error Toast
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -80,9 +77,7 @@ fun EliteAuthScreen(
                 )
             )
     ) {
-        // Radial Gradient Effects (Background Gloom)
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Top Center Green Glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color(0xFF064e3b), Color.Transparent),
@@ -90,7 +85,6 @@ fun EliteAuthScreen(
                     radius = size.width * 0.8f
                 )
             )
-            // Bottom Right Blue/Dark Glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color(0xFF0f172a), Color.Transparent),
@@ -100,35 +94,30 @@ fun EliteAuthScreen(
             )
         }
 
-        // Main Content Centered
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(20.dp)
-                .fillMaxWidth(0.95f), // Responsive width
+                .fillMaxWidth(0.95f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             
-            // Glass Card
             Card(
                 shape = RoundedCornerShape(32.dp),
                 colors = CardDefaults.cardColors(containerColor = ColorCardBg),
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, Color(0x3310B981), RoundedCornerShape(32.dp))
-                    .shadow(elevation = 0.dp) // Custom shadow handled via CSS previously
             ) {
                 Column(
                     modifier = Modifier.padding(vertical = 48.dp, horizontal = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     
-                    // --- Logo Section ---
                     CipherLogo(modifier = Modifier.size(90.dp))
                     
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Title
                     Text(
                         text = "CIPHER ELITE",
                         fontSize = 32.sp,
@@ -145,7 +134,6 @@ fun EliteAuthScreen(
                         modifier = Modifier.padding(top = 8.dp, bottom = 40.dp)
                     )
 
-                    // Inputs
                     EliteTextField(
                         value = email,
                         onValueChange = viewModel::onEmailChange,
@@ -165,7 +153,6 @@ fun EliteAuthScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Main Button
                     val buttonScale by animateFloatAsState(if (isLoading) 0.98f else 1f)
                     
                     Button(
@@ -178,10 +165,10 @@ fun EliteAuthScreen(
                             .shadow(10.dp, spotColor = ColorGreenPrimary, ambientColor = ColorGreenPrimary),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent, // Using gradient below
+                            containerColor = Color.Transparent,
                             disabledContainerColor = Color.Gray
                         ),
-                        contentPadding = PaddingValues() // Reset padding for gradient
+                        contentPadding = PaddingValues()
                     ) {
                         Box(
                             modifier = Modifier
@@ -202,7 +189,6 @@ fun EliteAuthScreen(
                         }
                     }
 
-                    // Secondary Button (Telegram Link)
                     TextButton(
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/Cipher_attack"))
@@ -218,7 +204,6 @@ fun EliteAuthScreen(
                         )
                     }
 
-                    // Status Indicator
                     Row(
                         modifier = Modifier.padding(top = 32.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -245,7 +230,6 @@ fun EliteAuthScreen(
     }
 }
 
-// Helper: Custom Input Field
 @Composable
 fun EliteTextField(
     value: String,
@@ -275,18 +259,14 @@ fun EliteTextField(
     )
 }
 
-// Helper: The Custom SVG Logo drawn in Canvas
 @Composable
 fun CipherLogo(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val pathColor = ColorGreenPrimary
         val strokeWidth = 6.dp.toPx()
-        
-        // Scale the path from 100x100 to actual size
         val scaleX = size.width / 100f
         val scaleY = size.height / 100f
 
-        // Draw Path: M 75 25 L 35 25 L 15 50 L 35 75 L 75 75
         val mainPath = Path().apply {
             moveTo(75f * scaleX, 25f * scaleY)
             lineTo(35f * scaleX, 25f * scaleY)
@@ -301,15 +281,13 @@ fun CipherLogo(modifier: Modifier = Modifier) {
             style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
-        // Circle: cx="40" cy="50" r="10"
         drawCircle(
             color = pathColor,
             center = androidx.compose.ui.geometry.Offset(40f * scaleX, 50f * scaleY),
-            radius = 10f * scaleX, // Assuming proportional radius
+            radius = 10f * scaleX,
             style = Stroke(width = strokeWidth)
         )
 
-        // Line: M 50 50 L 85 50
         drawLine(
             color = pathColor,
             start = androidx.compose.ui.geometry.Offset(50f * scaleX, 50f * scaleY),
@@ -318,7 +296,6 @@ fun CipherLogo(modifier: Modifier = Modifier) {
             cap = StrokeCap.Round
         )
 
-        // Bottom Line (Faded): M 68 50 L 68 65
         drawLine(
             color = ColorGreenLight.copy(alpha = 0.6f),
             start = androidx.compose.ui.geometry.Offset(68f * scaleX, 50f * scaleY),
