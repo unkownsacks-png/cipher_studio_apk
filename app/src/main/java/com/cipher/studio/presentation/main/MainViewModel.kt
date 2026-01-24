@@ -1,17 +1,24 @@
 package com.cipher.studio.presentation.main
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.speech.tts.TextToSpeech
+import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cipher.studio.data.local.ApiKeyManager
-import com.cipher.studio.data.local.LocalStorageManager // Added Import
+import com.cipher.studio.data.local.LocalStorageManager
 import com.cipher.studio.domain.model.*
 import com.cipher.studio.domain.service.GenerativeAIService
 import com.cipher.studio.domain.service.StreamResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
@@ -20,19 +27,14 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val aiService: GenerativeAIService,
     private val apiKeyManager: ApiKeyManager,
-    private val storageManager: LocalStorageManager, // Injected Storage
+    private val storageManager: LocalStorageManager,
     application: Application
 ) : AndroidViewModel(application) {
 
     // --- State ---
-    // Initialize Auth state directly from storage!
     private val _isAuthorized = MutableStateFlow(storageManager.isAuthorized())
     val isAuthorized = _isAuthorized.asStateFlow()
 
-    private val _hasApiKey = MutableStateFlow(apiKeyManager.hasKey())
-    val hasApiKey = _hasApiKey.asStateFlow()
-
-    // Initialize Theme from storage
     private val _theme = MutableStateFlow(if(storageManager.isDarkTheme()) Theme.DARK else Theme.LIGHT)
     val theme = _theme.asStateFlow()
 
@@ -41,6 +43,9 @@ class MainViewModel @Inject constructor(
 
     private val _prompt = MutableStateFlow("")
     val prompt = _prompt.asStateFlow()
+
+    private val _attachments = MutableStateFlow<List<Attachment>>(emptyList())
+    val attachments = _attachments.asStateFlow()
 
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming = _isStreaming.asStateFlow()
@@ -60,24 +65,17 @@ class MainViewModel @Inject constructor(
     private val _config = MutableStateFlow(AppConstants.DEFAULT_CONFIG)
     val config = _config.asStateFlow()
 
-    // Attachments State (For VisionHub sharing to Chat)
-    private val _attachments = MutableStateFlow<List<Attachment>>(emptyList())
-    val attachments = _attachments.asStateFlow()
-
     private var tts: TextToSpeech? = null
 
     init {
-        // 1. Load Sessions from Disk
         val savedSessions = storageManager.getSessions()
         if (savedSessions.isNotEmpty()) {
             _sessions.value = savedSessions
-            // Load the most recent session
             loadSession(savedSessions.first())
         } else {
             createNewSession()
         }
 
-        // 2. Initialize TTS
         tts = TextToSpeech(application) { status ->
             if (status != TextToSpeech.ERROR) tts?.language = Locale.US
         }
@@ -85,13 +83,11 @@ class MainViewModel @Inject constructor(
 
     // --- Actions ---
 
-    // Auth Update
     fun setAuthorized(auth: Boolean) {
         _isAuthorized.value = auth
-        storageManager.setAuthorized(auth) // Persist!
+        storageManager.setAuthorized(auth)
     }
 
-    // Session Management
     fun createNewSession() {
         val newSession = Session(
             id = UUID.randomUUID().toString(),
@@ -102,19 +98,17 @@ class MainViewModel @Inject constructor(
         )
         _sessions.value = listOf(newSession) + _sessions.value
         loadSession(newSession)
-        saveSessionsToDisk() // Persist!
+        saveSessionsToDisk()
     }
 
     fun loadSession(session: Session) {
         _currentSessionId.value = session.id
         _history.value = session.history
         _config.value = session.config
-        // Close sidebar on mobile when selecting
         _isSidebarOpen.value = false
     }
 
     private fun saveSessionsToDisk() {
-        // Update the current session in the list before saving
         val currentId = _currentSessionId.value
         if (currentId != null) {
             val updatedList = _sessions.value.map { 
@@ -122,11 +116,41 @@ class MainViewModel @Inject constructor(
                 else it 
             }
             _sessions.value = updatedList
-            storageManager.saveSessions(updatedList) // Write to Disk
+            storageManager.saveSessions(updatedList)
         }
     }
 
-    // Chat Logic
+    // --- Image Handling (Fix for Point 4) ---
+    fun addAttachment(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>().applicationContext
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                
+                if (bitmap != null) {
+                    val outputStream = ByteArrayOutputStream()
+                    // Compress image to avoid hitting token limits or memory issues
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                    val byteArray = outputStream.toByteArray()
+                    val base64String = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+                    
+                    val newAttachment = Attachment(mimeType = "image/jpeg", data = base64String)
+                    withContext(Dispatchers.Main) {
+                        _attachments.value = _attachments.value + newAttachment
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun clearAttachments() {
+        _attachments.value = emptyList()
+    }
+
+    // --- Chat Logic ---
     fun handleRun(overridePrompt: String? = null) {
         val textToRun = overridePrompt ?: _prompt.value
         val attachmentsToUse = if (overridePrompt != null) emptyList() else _attachments.value
@@ -139,7 +163,6 @@ class MainViewModel @Inject constructor(
             return
         }
 
-        // User Message
         val userMsg = ChatMessage(
             id = UUID.randomUUID().toString(),
             role = ChatRole.USER,
@@ -148,18 +171,16 @@ class MainViewModel @Inject constructor(
             attachments = attachmentsToUse
         )
         
-        // Update State
         val currentHistory = _history.value + userMsg
         _history.value = currentHistory
         
         // Reset Inputs
         if (overridePrompt == null) {
             _prompt.value = ""
-            _attachments.value = emptyList()
+            clearAttachments() // Clear images after sending
         }
         _isStreaming.value = true
 
-        // Update Session Title if it's the first message
         if (currentHistory.size == 1) {
             val title = textToRun.take(30) + "..."
             val currentId = _currentSessionId.value
@@ -168,12 +189,10 @@ class MainViewModel @Inject constructor(
             }
         }
 
-        // Placeholder for AI Response
         val modelMsgId = UUID.randomUUID().toString()
         val placeholderMsg = ChatMessage(modelMsgId, ChatRole.MODEL, "", System.currentTimeMillis())
         _history.value = currentHistory + placeholderMsg
 
-        // Save immediately so user sees their message if app crashes
         saveSessionsToDisk()
 
         viewModelScope.launch {
@@ -194,13 +213,13 @@ class MainViewModel @Inject constructor(
                     is StreamResult.Error -> {
                         updateLastMessage(fullResponse + "\n\n[Error: ${result.message}]")
                         _isStreaming.value = false
-                        saveSessionsToDisk() // Save error state
+                        saveSessionsToDisk()
                     }
                     else -> {}
                 }
             }
             _isStreaming.value = false
-            saveSessionsToDisk() // Save final response
+            saveSessionsToDisk()
         }
     }
 
@@ -219,9 +238,8 @@ class MainViewModel @Inject constructor(
         _history.value = _history.value + ChatMessage(role = ChatRole.MODEL, text = text, timestamp = System.currentTimeMillis())
     }
 
-    // Other Actions
-    fun saveApiKey(key: String) { apiKeyManager.saveApiKey(key); _hasApiKey.value = true }
-    fun removeApiKey() { apiKeyManager.clearApiKey(); _hasApiKey.value = false }
+    fun saveApiKey(key: String) { apiKeyManager.saveApiKey(key) }
+    fun removeApiKey() { apiKeyManager.clearApiKey() }
     fun toggleSidebar() { _isSidebarOpen.value = !_isSidebarOpen.value }
     fun setViewMode(mode: ViewMode) { _currentView.value = mode }
     fun updatePrompt(text: String) { _prompt.value = text }
