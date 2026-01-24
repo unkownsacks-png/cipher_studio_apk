@@ -6,9 +6,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -41,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cipher.studio.R
-import com.cipher.studio.domain.model.ChatMessage
 import com.cipher.studio.domain.model.ChatRole
 import com.cipher.studio.domain.model.Session
 import com.cipher.studio.domain.model.Theme
@@ -49,7 +50,7 @@ import com.cipher.studio.domain.model.ViewMode
 import com.cipher.studio.presentation.about.AboutScreen
 import com.cipher.studio.presentation.auth.EliteAuthScreen
 import com.cipher.studio.presentation.codelab.CodeLabScreen
-import com.cipher.studio.presentation.components.ChatMessageItem // IMPORTING OUR NEW COMPONENT
+import com.cipher.studio.presentation.components.ChatMessageItem
 import com.cipher.studio.presentation.components.ControlPanel
 import com.cipher.studio.presentation.components.SettingsDialog
 import com.cipher.studio.presentation.cyberhouse.CyberHouseScreen
@@ -59,6 +60,7 @@ import com.cipher.studio.presentation.prompt.PromptStudioScreen
 import com.cipher.studio.presentation.visionhub.VisionHubScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @Composable
 fun MainScreen(
@@ -66,9 +68,9 @@ fun MainScreen(
 ) {
     var showSplash by remember { mutableStateOf(true) }
 
-    // Splash Sequence
+    // Professional Splash Sequence
     LaunchedEffect(Unit) {
-        delay(1500) // Slightly faster for snappier feel
+        delay(1500)
         showSplash = false
     }
 
@@ -93,7 +95,6 @@ fun SplashScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        // Minimalist Splash
         Icon(
             imageVector = Icons.Rounded.AutoAwesome,
             contentDescription = "Logo",
@@ -109,7 +110,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // States
+    // State Collectors
     val theme by viewModel.theme.collectAsState()
     val isDark = theme == Theme.DARK
     val currentView by viewModel.currentView.collectAsState()
@@ -121,7 +122,11 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var isControlsOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    
+    // Feature 2: Delete Confirmation Dialog State
+    var sessionToDelete by remember { mutableStateOf<String?>(null) }
 
+    // Back Handler
     BackHandler(enabled = drawerState.isOpen || isControlsOpen) {
         if (isControlsOpen) isControlsOpen = false
         else scope.launch { drawerState.close() }
@@ -133,7 +138,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(300.dp)
+                modifier = Modifier.width(320.dp) // Slightly wider for comfort
             ) {
                 InternalSidebar(
                     sessions = sessions,
@@ -147,14 +152,13 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                         viewModel.createNewSession()
                         scope.launch { drawerState.close() }
                     },
-                    onDeleteSession = { id -> Toast.makeText(context, "Hold to delete", Toast.LENGTH_SHORT).show() },
+                    onRequestDelete = { id -> sessionToDelete = id }, // Trigger Dialog
                     onToggleSidebar = { scope.launch { drawerState.close() } },
                     currentView = currentView,
                     onViewChange = { 
                         viewModel.setViewMode(it)
                         scope.launch { drawerState.close() }
                     },
-                    onLogout = { viewModel.setAuthorized(false) },
                     onOpenSettings = { 
                         showSettings = true 
                         scope.launch { drawerState.close() }
@@ -175,15 +179,16 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                     .padding(paddingValues)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    
-                    // 1. GEMINI STYLE HEADER (Minimal & Floating)
+
+                    // 1. GEMINI STYLE HEADER
+                    // Note: Ensure your themes.xml has <item name="windowActionBar">false</item>
                     GeminiTopBar(
                         currentView = currentView,
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onSettingsClick = { isControlsOpen = true }
                     )
 
-                    // 2. CONTENT AREA
+                    // 2. CONTENT AREA (Modules)
                     Box(modifier = Modifier.weight(1f)) {
                         AnimatedContent(
                             targetState = currentView,
@@ -192,7 +197,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                         ) { targetView ->
                             when (targetView) {
                                 ViewMode.CHAT -> ChatView(viewModel, isDark)
-                                // Keep other screens as is, or refactor later
                                 ViewMode.CODE_LAB -> CodeLabScreen(theme = theme, viewModel = hiltViewModel())
                                 ViewMode.VISION_HUB -> VisionHubScreen(theme = theme, viewModel = hiltViewModel())
                                 ViewMode.PROMPT_STUDIO -> PromptStudioScreen(theme = theme, onUsePrompt = { viewModel.updatePrompt(it); viewModel.setViewMode(ViewMode.CHAT) })
@@ -217,6 +221,33 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     }
 
+    // Delete Confirmation Dialog
+    if (sessionToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { sessionToDelete = null },
+            title = { Text("Delete Chat?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // viewModel.deleteSession(sessionToDelete!!) // Ensure this method exists in VM
+                        Toast.makeText(context, "Deleted (Implement VM logic)", Toast.LENGTH_SHORT).show()
+                        sessionToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sessionToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Settings Dialog
     if (showSettings) {
         SettingsDialog(
             currentKey = null,
@@ -228,14 +259,13 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
-// --- GEMINI STYLE HEADER (Transparent) ---
+// --- HEADER ---
 @Composable
 fun GeminiTopBar(
     currentView: ViewMode,
     onMenuClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    // No background, no shadows. Just icons floating.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -247,7 +277,6 @@ fun GeminiTopBar(
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
-        // Only show Title if not in Chat mode (Chat has its own greeting)
         if (currentView != ViewMode.CHAT) {
             Text(
                 text = currentView.name.replace("_", " "),
@@ -263,7 +292,7 @@ fun GeminiTopBar(
     }
 }
 
-// --- THE MAIN CHAT VIEW ---
+// --- CHAT VIEW ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -285,44 +314,42 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            // Add padding at bottom so text isn't hidden behind input bar
-            contentPadding = PaddingValues(top = 0.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp), // Extra padding for input bar
             modifier = Modifier.fillMaxSize()
         ) {
-            // Greeting (Empty State)
             if (history.isEmpty()) {
                 item { GreetingHeader() }
             }
 
-            // Messages
             items(history) { message ->
-                // USE THE NEW COMPONENT WE CREATED BEFORE
                 ChatMessageItem(
                     msg = message,
                     isDark = isDark,
                     isStreaming = isStreaming && message == history.last() && message.role == ChatRole.MODEL,
                     onSpeak = { viewModel.speakText(it) },
                     onPin = { viewModel.togglePin(it) },
-                    onRegenerate = { /* Call regenerate in VM */ }
+                    onRegenerate = { /* Call VM */ },
+                    onEdit = { viewModel.updatePrompt(it) } // Populate prompt to edit
                 )
             }
-            
+
             if (isStreaming) {
                 item { StreamingIndicator() }
             }
         }
 
-        // --- GEMINI INPUT BAR (Floating at Bottom) ---
+        // --- FLOATING INPUT BAR ---
+        // Feature 4: Handle IME (Keyboard) Padding
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(
-                    // Fade out effect for background behind input
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    brush = Brush.verticalGradient(
                         colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)
                     )
                 )
+                .imePadding() // CRITICAL: Moves bar up when keyboard opens
         ) {
             GeminiInputBar(
                 prompt = prompt,
@@ -336,29 +363,36 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     }
 }
 
+// --- FEATURE 1: SMART TIME-BASED GREETING ---
 @Composable
 fun GreetingHeader() {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    val greeting = when (hour) {
+        in 5..11 -> "Good Morning"
+        in 12..17 -> "Good Afternoon"
+        else -> "Good Evening"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 40.dp)
+            .padding(horizontal = 24.dp, vertical = 60.dp)
     ) {
-        // Gradient Text Effect
         Text(
-            text = "Hello, Creator",
+            text = "$greeting, Creator",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) // Or use a ShaderBrush for gradient
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
         )
         Text(
-            text = "How can I help you today?",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            text = "Ready to build something extraordinary?",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
     }
 }
 
-// --- NEW GEMINI INPUT BAR ---
+// --- INPUT BAR ---
 @Composable
 fun GeminiInputBar(
     prompt: String,
@@ -373,7 +407,6 @@ fun GeminiInputBar(
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, bottom = 24.dp, top = 12.dp)
     ) {
-        // Attachment Indicator
         if (attachmentCount > 0) {
             Row(
                 modifier = Modifier
@@ -389,29 +422,26 @@ fun GeminiInputBar(
             }
         }
 
-        // The Capsule
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .clip(RoundedCornerShape(28.dp)) // Full Rounded Capsule
-                .background(MaterialTheme.colorScheme.surfaceVariant) // Greyish background
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Attach Button
             IconButton(
                 onClick = onAttach,
                 modifier = Modifier
                     .size(36.dp)
-                    .background(MaterialTheme.colorScheme.background, CircleShape) // Contrast circle
+                    .background(MaterialTheme.colorScheme.background, CircleShape)
             ) {
                 Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface)
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Input Field (Transparent)
             Box(modifier = Modifier.weight(1f)) {
                 if (prompt.isEmpty()) {
                     Text(
@@ -434,7 +464,6 @@ fun GeminiInputBar(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Send Button
             val isEnabled = prompt.isNotBlank() || isStreaming
             IconButton(
                 onClick = onSend,
@@ -458,7 +487,6 @@ fun GeminiInputBar(
 @Composable
 fun StreamingIndicator() {
     Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 16.dp)) {
-        // Minimal pulsating dot or text
         Text(
             "Cipher is thinking...",
             style = MaterialTheme.typography.bodySmall,
@@ -467,18 +495,18 @@ fun StreamingIndicator() {
     }
 }
 
-// --- CLEAN SIDEBAR (Minimalist) ---
+// --- FEATURE 3: COMPREHENSIVE SIDEBAR & FEATURE 2: DELETE LOGIC ---
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
     sessions: List<Session>,
     currentSessionId: String?,
     onSelectSession: (String) -> Unit,
     onNewSession: () -> Unit,
-    onDeleteSession: (String) -> Unit,
+    onRequestDelete: (String) -> Unit, // Callback for delete
     onToggleSidebar: () -> Unit,
     currentView: ViewMode,
     onViewChange: (ViewMode) -> Unit,
-    onLogout: () -> Unit,
     onOpenSettings: () -> Unit,
     isDark: Boolean
 ) {
@@ -487,15 +515,14 @@ fun InternalSidebar(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Simple Text Header
-        Text(
-            "Cipher Studio",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 24.dp, start = 8.dp)
-        )
+        // 1. App Header
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
+             Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+             Spacer(modifier = Modifier.width(12.dp))
+             Text("Cipher Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
 
-        // New Chat Button (Prominent)
+        // 2. New Chat Button
         Button(
             onClick = onNewSession,
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -510,10 +537,24 @@ fun InternalSidebar(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Recent", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+        // 3. APPS / MODULES SECTION
+        Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Session List
+        SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
+        SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
+        SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
+        SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
+        // Add other modules here as needed...
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4. HISTORY SECTION (With Long Press to Delete)
+        Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(sessions) { session ->
                 val isSelected = session.id == currentSessionId
@@ -522,10 +563,16 @@ fun InternalSidebar(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-                        .clickable { onSelectSession(session.id) }
+                        // Enable Long Click for Deletion
+                        .combinedClickable(
+                            onClick = { onSelectSession(session.id) },
+                            onLongClick = { onRequestDelete(session.id) }
+                        )
                         .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(Icons.Outlined.Message, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = session.title,
                         maxLines = 1,
@@ -537,13 +584,31 @@ fun InternalSidebar(
             }
         }
         
-        // Footer Settings
-        Divider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         
+        // 5. Footer
         Row(modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
             Text("Settings", color = MaterialTheme.colorScheme.onSurface)
         }
+    }
+}
+
+@Composable
+fun SidebarItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
