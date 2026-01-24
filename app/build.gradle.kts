@@ -25,7 +25,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = true // ኮዱን ያጠቅዋል (ለ Security ጥሩ ነው)
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -50,12 +50,12 @@ android {
 }
 
 dependencies {
-    // Core Android & Compose
+    // --- CORE ANDROID & COMPOSE ---
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     
-    // አስፈላጊ ለውጥ: BOM ወደ 2024.02.01 ተቀይሯል (ለ HorizontalDivider እንዲሰራ)
+    // BOM (Bill of Materials) - ስሪቶችን በአንድ ላይ ይቆጣጠራል (2024.02.01 አሪፍ ነው)
     implementation(platform("androidx.compose:compose-bom:2024.02.01"))
     
     implementation("androidx.compose.ui:ui")
@@ -63,32 +63,36 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     
-    // አስፈላጊ ለውጥ: Icons Version 1.6.0 (ለ AutoMirrored እንዲሰራ)
+    // Icons (ለ AutoMirrored እና ለተለያዩ አይኮኖች)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
-implementation("com.google.code.gson:gson:2.10.1")
-    // Dependency Injection (Hilt)
+
+    // --- DATA & SECURITY ---
+    // ለ Chat History ማጠራቀሚያ (JSON Parsing)
+    implementation("com.google.code.gson:gson:2.10.1")
+    // ለ API Key ደህንነት (EncryptedSharedPreferences)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // --- DEPENDENCY INJECTION (HILT) ---
     implementation("com.google.dagger:hilt-android:2.48")
     kapt("com.google.dagger:hilt-android-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
-    // Firebase (BOM)
+    // --- FIREBASE ---
     implementation(platform("com.google.firebase:firebase-bom:32.7.1"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
 
-    // አስፈላጊ ለውጥ: Gemini Version 0.1.2 (ኮድህ ከዚህ ስሪት ጋር ስለሚጣጣም)
+    // --- AI (GEMINI) ---
+    // ትክክለኛው ስሪት ለ 'systemInstruction' እና 'content{}' builder
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
-implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    
-    // Coil (Image Loading - Ensure this is present)
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("io.coil-kt:coil-svg:2.5.0") // For SVG Logo support
 
-    // Image Loading (Coil)
+    // --- IMAGE LOADING (COIL) ---
+    // ለ VisionHub እና ለ SVG Logo ማሳያ
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("io.coil-kt:coil-svg:2.5.0")
 
-    // Testing
+    // --- TESTING ---
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
