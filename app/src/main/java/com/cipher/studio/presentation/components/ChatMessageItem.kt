@@ -22,7 +22,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.VolumeUp
-import androidx.compose.material.icons.rounded.AutoAwesome // The Gemini Sparkle Icon
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +45,7 @@ fun ChatMessageItem(
     isStreaming: Boolean = false,
     onSpeak: ((String) -> Unit)? = null,
     onPin: ((String) -> Unit)? = null,
-    onRegenerate: (() -> Unit)? = null // Future proofing
+    onRegenerate: (() -> Unit)? = null
 ) {
     val isUser = msg.role == ChatRole.USER
     val clipboardManager = LocalClipboardManager.current
@@ -95,7 +95,8 @@ fun ChatMessageItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp, horizontal = 16.dp),
-            crossAxisAlignment = CrossAxisAlignment.Start
+            // FIXED: Used verticalAlignment instead of crossAxisAlignment
+            verticalAlignment = Alignment.Top 
         ) {
             // 1. The Gemini Icon (Sparkles)
             Icon(
@@ -114,7 +115,7 @@ fun ChatMessageItem(
                 
                 // AI Attachments (if any)
                 if (msg.attachments.isNotEmpty()) {
-                    UserAttachments(msg) // Reusing attachment logic
+                    UserAttachments(msg)
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
