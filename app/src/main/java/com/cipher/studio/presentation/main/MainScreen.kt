@@ -2,13 +2,15 @@ package com.cipher.studio.presentation.main
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -287,7 +287,13 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
-    val context = LocalContext.current
+    
+    // IMAGE PICKER LOGIC
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { viewModel.addAttachment(it) }
+    }
 
     // Auto Scroll
     LaunchedEffect(history.size, isStreaming) {
@@ -325,7 +331,6 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
 
         // 2. Floating Input Bar (Foreground)
-        // This looks like iMessage/Telegram
         AlignFloatingInput(
             modifier = Modifier.align(Alignment.BottomCenter),
             prompt = prompt,
@@ -334,12 +339,10 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 viewModel.handleRun()
                 focusManager.clearFocus() 
             },
-            onAttach = { 
-                Toast.makeText(context, "Opening Gallery...", Toast.LENGTH_SHORT).show()
-                // TODO: Wire up actual ViewModel image picker here
-            },
+            onAttach = { galleryLauncher.launch("image/*") }, // Trigger Gallery
             isStreaming = isStreaming,
-            isDark = isDark
+            isDark = isDark,
+            attachmentCount = attachments.size
         )
     }
 }
@@ -352,76 +355,98 @@ fun AlignFloatingInput(
     onSend: () -> Unit,
     onAttach: () -> Unit,
     isStreaming: Boolean,
-    isDark: Boolean
+    isDark: Boolean,
+    attachmentCount: Int
 ) {
-    Surface(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .imePadding(), // Move up with keyboard
-        shape = RoundedCornerShape(28.dp),
-        color = if (isDark) Color(0xFF1E293B) else Color.White,
-        shadowElevation = 8.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+            .imePadding() // Move up with keyboard
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            // Attachment Button
-            IconButton(
-                onClick = onAttach,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        // Show Attachment Indicator if images are selected
+        if (attachmentCount > 0) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.padding(bottom = 8.dp).align(Alignment.Start)
             ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Attach",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Image, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("$attachmentCount Image(s) Attached", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
             }
+        }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Text Input
-            TextField(
-                value = prompt,
-                onValueChange = onPromptChange,
-                placeholder = { Text("Message Cipher...", fontSize = 14.sp) },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 40.dp, max = 120.dp), // Auto-grow
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                ),
-                maxLines = 5
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Send Button (Floating Gradient)
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isStreaming) MaterialTheme.colorScheme.error 
-                        else MaterialTheme.colorScheme.primary
-                    )
-                    .clickable { onSend() },
-                contentAlignment = Alignment.Center
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
-                Icon(
-                    imageVector = if (isStreaming) Icons.Default.Stop else Icons.Default.ArrowUpward,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                // Attachment Button
+                IconButton(
+                    onClick = onAttach,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Attach",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Text Input
+                TextField(
+                    value = prompt,
+                    onValueChange = onPromptChange,
+                    placeholder = { Text("Message Cipher...", fontSize = 14.sp) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 40.dp, max = 120.dp), // Auto-grow
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    ),
+                    maxLines = 5
                 )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Send Button (Floating Gradient)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isStreaming) MaterialTheme.colorScheme.error 
+                            else MaterialTheme.colorScheme.primary
+                        )
+                        .clickable { onSend() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isStreaming) Icons.Default.Stop else Icons.Default.ArrowUpward,
+                        contentDescription = "Send",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
