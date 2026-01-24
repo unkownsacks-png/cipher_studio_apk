@@ -60,23 +60,22 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         config: ModelConfig
     ): Flow<StreamResult> = flow {
         
+        // 1. API Key Check
         if (apiKey.isBlank()) {
             emit(StreamResult.Error("No API Key found. Please check Settings."))
             return@flow
         }
 
-        // 1. Time Injection
+        // 2. Prepare System Context
         val sdf = SimpleDateFormat("EEEE, MMMM d, yyyy 'at' h:mm:ss a z", Locale.US)
         val timeString = sdf.format(Date())
-        
         val combinedSystemInstruction = "$DEEP_THINK_INSTRUCTION\n[SYSTEM TELEMETRY]\nSERVER_TIME: $timeString\n\nCONTEXT: ${config.systemInstruction}"
 
-        // 2. Configure Model with Native System Instruction
-        // This is the clean way. The SDK separates this from the chat history.
+        // 3. Configure Model (SDK 0.9.0 Compatible)
         val generativeModel = GenerativeModel(
             modelName = config.model.value,
             apiKey = apiKey,
-            // HERE IS THE FIX: Passing it natively
+            // FIX 1: Using 'content { text(...) }' builder for systemInstruction
             systemInstruction = content { text(combinedSystemInstruction) },
             generationConfig = generationConfig {
                 temperature = config.temperature.toFloat()
@@ -92,25 +91,25 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             )
         )
 
-        // 3. Construct Clean History
-        // We only map the actual previous messages. No fake injections needed.
+        // 4. Construct Sanitized History
         val sdkHistory = mutableListOf<Content>()
         
-        // Remove the current prompt from history (it will be sent in sendMessage)
-        val historyToProcess = if (history.isNotEmpty()) history.dropLast(1) else emptyList()
+        // IMPORTANT: The 'history' list from ViewModel usually contains the CURRENT prompt as the last item.
+        // We MUST remove it before passing to startChat, or we get the "User role must not follow User role" error.
+        val pastHistory = if (history.isNotEmpty()) history.dropLast(1) else emptyList()
 
-        historyToProcess.forEach { msg ->
+        pastHistory.forEach { msg ->
+            // Map Roles ("user" or "model")
             val roleStr = if (msg.role == ChatRole.USER) "user" else "model"
             
-            // SANITIZER: Prevent User -> User collision
-            // If the last message was User and this one is also User, insert a dummy Model response.
+            // FIX 2: Prevent User -> User collision
+            // If the last message in our built history was 'user' and the new one is also 'user',
+            // we insert a dummy model response.
             if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user" && roleStr == "user") {
                 sdkHistory.add(content("model") { text("...") })
             }
-            // Skip if model follows model (rare, but safer to skip)
-            if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "model" && roleStr == "model") {
-                return@forEach
-            }
+            
+            // Note: Consecutive 'model' messages are usually fine, or merged by SDK, but safe to leave as is.
 
             sdkHistory.add(content(roleStr) {
                 text(msg.text)
@@ -123,16 +122,17 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             })
         }
 
-        // FINAL SAFETY CHECK: History must end with MODEL for startChat to accept a new USER prompt
+        // FIX 3: Ensure History ends with MODEL
+        // 'startChat' requires the last message in history to be from the MODEL if we are about to send a new USER prompt.
         if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user") {
-            sdkHistory.add(content("model") { text("...") })
+            sdkHistory.add(content("model") { text("Acknowledged.") })
         }
 
         try {
-            // 4. Initialize Chat
+            // 5. Initialize Chat
             val chat = generativeModel.startChat(history = sdkHistory)
 
-            // 5. Prepare Current Prompt
+            // 6. Prepare Current Prompt Content
             val inputContent = content {
                 text(prompt)
                 attachments.forEach { attachment ->
@@ -143,7 +143,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
                 }
             }
 
-            // 6. Execute Stream
+            // 7. Execute Stream
             val responseStream = chat.sendMessageStream(inputContent)
             
             responseStream.collect { chunk ->
@@ -155,8 +155,9 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         } catch (e: Exception) {
             e.printStackTrace()
             
-            // Fallback: Single Shot (Context-Free) if Chat Fails
-            // This ensures the app NEVER crashes on chat errors.
+            // FALLBACK: Single-Shot Mode
+            // If chat still fails (e.g. invalid history state), try generating without history.
+            // This prevents the app from showing an error to the user.
             val fallbackStream = generativeModel.generateContentStream(content {
                 text(prompt)
                 attachments.forEach { attachment ->
@@ -175,7 +176,14 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         }
 
     }.catch { e ->
-        emit(StreamResult.Error("Error: ${e.message}"))
+        // Last resort error handling
+        val errorMsg = e.message ?: "Unknown Error"
+        // If it's the role error, give a hint
+        if (errorMsg.contains("role", ignoreCase = true)) {
+            emit(StreamResult.Error("Session Sync Error. Please clear chat or restart."))
+        } else {
+            emit(StreamResult.Error("Gemini Error: $errorMsg"))
+        }
     }
 
     private fun base64ToBitmap(base64Str: String): Bitmap? {
