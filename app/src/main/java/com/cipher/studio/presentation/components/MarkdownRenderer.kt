@@ -100,7 +100,7 @@ fun MarkdownRenderer(
                 }
                 is MarkdownBlock.Quote -> {
                     // NEW: Block Quote Support (>)
-                    Row(modifier = Modifier.intrinsicHeight(IntrinsicSize.Min)) {
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                         Box(
                             modifier = Modifier
                                 .width(4.dp)
