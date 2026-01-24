@@ -2,13 +2,14 @@ package com.cipher.studio.domain.repository
 
 import android.content.Context
 import android.provider.Settings
+import com.cipher.studio.data.local.LocalStorageManager // Added Import
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// ውጤቱን ለመግለፅ የምንጠቀምበት (Success or Error message)
+// AuthResult class remains the same...
 sealed class AuthResult {
     object Success : AuthResult()
     data class Error(val message: String) : AuthResult()
@@ -17,25 +18,23 @@ sealed class AuthResult {
 @Singleton
 class AuthRepository @Inject constructor(
     private val db: FirebaseFirestore,
-    @ApplicationContext private val context: Context // Context ያስፈልገናል ለ Device ID
+    private val storageManager: LocalStorageManager, // Injected Storage
+    @ApplicationContext private val context: Context
 ) {
 
-    /**
-     * Translating the logic from EliteAuth.tsx:
-     * 1. Get Device ID
-     * 2. Check Firestore User
-     * 3. Validate Key & Payment
-     * 4. Device Lock Check (First time vs Registered)
-     */
     suspend fun verifyAccess(email: String, key: String): AuthResult {
+        // 1. FAST PATH: Check Local Storage first (Offline Support)
+        if (storageManager.isAuthorized()) {
+            return AuthResult.Success
+        }
+
+        // 2. SLOW PATH: Check Firebase (Online)
         return try {
             val cleanEmail = email.lowercase().trim()
             if (cleanEmail.isEmpty() || key.isEmpty()) {
                 return AuthResult.Error("እባክዎ መረጃዎን በትክክል ያስገቡ!")
             }
 
-            // 1. የስልኩን ልዩ መለያ (Device ID) ማግኘት
-            // Equiv to: Device.getId() -> uuid/identifier
             val currentDeviceId = Settings.Secure.getString(
                 context.contentResolver,
                 Settings.Secure.ANDROID_ID
@@ -49,32 +48,34 @@ class AuthRepository @Inject constructor(
                 val isPaid = userSnap.getBoolean("isPaid") ?: false
                 val registeredDeviceId = userSnap.getString("deviceId")
 
-                // 2. የቁልፍ እና የክፍያ ማረጋገጫ
                 if (accessKey == key && isPaid) {
-                    
-                    // --- DEVICE LOCKING LOGIC ---
+                    // Device Logic
                     if (registeredDeviceId.isNullOrEmpty()) {
-                        // ስልኩ ለመጀመሪያ ጊዜ ከሆነ፣ ID-ውን ይመዘግባል
-                        // updateDoc(userRef, { deviceId: currentDeviceId })
                         userRef.update("deviceId", currentDeviceId).await()
+                        // SUCCESS: Save to local storage
+                        storageManager.setAuthorized(true) 
                         AuthResult.Success
                     } else if (registeredDeviceId == currentDeviceId) {
-                        // ስልኩ ቀድሞ ከተመዘገበው ጋር አንድ ከሆነ ያስገባል
+                        // SUCCESS: Save to local storage
+                        storageManager.setAuthorized(true)
                         AuthResult.Success
                     } else {
-                        // ስልኩ የተለያየ ከሆነ ይከለክላል
-                        AuthResult.Error("❌ Access Violation: ይህ ቁልፍ ቀድሞ በሌላ ስልክ ላይ ተይዟል! እባክዎ ባለቤቱን ያነጋግሩ።")
+                        AuthResult.Error("❌ Access Violation: ይህ ቁልፍ በሌላ ስልክ ተይዟል!")
                     }
-
                 } else {
-                    AuthResult.Error("❌ Access Denied: የተሳሳተ ቁልፍ ወይም ያልተከፈለበት አካውንት።")
+                    AuthResult.Error("❌ Access Denied: የተሳሳተ ቁልፍ!")
                 }
             } else {
-                AuthResult.Error("🔍 ተጠቃሚው አልተገኘም፡ እባክዎ መጀመሪያ ይመዝገቡ።")
+                AuthResult.Error("🔍 ተጠቃሚው አልተገኘም።")
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            AuthResult.Error("📡 የግንኙነት ችግር፡ እባክዎ ኢንተርኔትዎን ያረጋግጡ ወይም ደግመው ይሞክሩ።")
+            AuthResult.Error("📡 የግንኙነት ችግር።")
         }
+    }
+    
+    // Manual Logout
+    fun logout() {
+        storageManager.setAuthorized(false)
     }
 }
