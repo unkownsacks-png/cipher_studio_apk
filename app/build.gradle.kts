@@ -78,7 +78,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
 
     // አስፈላጊ ለውጥ: Gemini Version 0.1.2 (ኮድህ ከዚህ ስሪት ጋር ስለሚጣጣም)
-    implementation("com.google.ai.client.generativeai:generativeai:0.1.2")
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 implementation("androidx.security:security-crypto:1.1.0-alpha06")
     
     // Coil (Image Loading - Ensure this is present)
