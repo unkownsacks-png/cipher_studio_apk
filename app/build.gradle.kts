@@ -65,7 +65,7 @@ dependencies {
     
     // አስፈላጊ ለውጥ: Icons Version 1.6.0 (ለ AutoMirrored እንዲሰራ)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
-
+implementation("com.google.code.gson:gson:2.10.1")
     // Dependency Injection (Hilt)
     implementation("com.google.dagger:hilt-android:2.48")
     kapt("com.google.dagger:hilt-android-compiler:2.48")
