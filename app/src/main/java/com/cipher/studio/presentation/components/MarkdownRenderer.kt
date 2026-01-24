@@ -1,5 +1,6 @@
 package com.cipher.studio.presentation.components
 
+import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.BrokenImage
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.cipher.studio.domain.model.Theme
@@ -97,8 +100,7 @@ fun MarkdownRenderer(
                 }
                 is MarkdownBlock.Quote -> {
                     // NEW: Block Quote Support (>)
-                    // FIX: Changed intrinsicHeight to height(IntrinsicSize.Min)
-                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Row(modifier = Modifier.intrinsicHeight(IntrinsicSize.Min)) {
                         Box(
                             modifier = Modifier
                                 .width(4.dp)
@@ -318,14 +320,14 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         var lastIndex = 0
         // We iterate char by char effectively (mocking a lexer) by matching all regexes
         // For simplicity in this robust version, we'll apply layers.
-
+        
         append(str) // Base text
 
         // 1. Strings (Green)
         stringRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
         }
-
+        
         // 2. Keywords (Orange/Purple)
         keywordsRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
@@ -340,7 +342,7 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         commentRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
         }
-
+        
         // Base Color
         addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, str.length)
     }
@@ -392,8 +394,6 @@ fun StyledText(
 
     val annotatedString = buildAnnotatedString {
         // Recursively apply styles: Link -> Code -> Bold -> Italic
-
-                // 1. LINKS [text](url) - handle Amharic chars [^\]]+
         val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
         var lastIndex = 0
 
@@ -403,16 +403,18 @@ fun StyledText(
             val linkText = matchResult.groupValues[1]
             val linkUrl = matchResult.groupValues[2]
 
-            // ከሊንኩ በፊት ያለውን ጽሁፍ በስታይል ጨምር
-            appendStyles(text.substring(lastIndex, start))
+            // 1. Append text BEFORE the link (Apply Bold/Italic/Code styles to it)
+            appendStyles(text.substring(lastIndex, start), isDark)
 
-            // ሊንኩን ጨምር
+            // 2. Append the LINK itself
             pushStringAnnotation(tag = "URL", annotation = linkUrl)
-            withStyle(SpanStyle(
-                color = Color(0xFF3B82F6), 
-                textDecoration = TextDecoration.Underline,
-                fontWeight = FontWeight.Medium
-            )) {
+            withStyle(
+                SpanStyle(
+                    color = Color(0xFF3B82F6), // Link Blue
+                    textDecoration = TextDecoration.Underline,
+                    fontWeight = FontWeight.Medium
+                )
+            ) {
                 append(linkText)
             }
             pop()
@@ -420,9 +422,9 @@ fun StyledText(
             lastIndex = end
         }
 
-        // ቀሪውን ጽሁፍ ጨምር
+        // 3. Append REMAINING text
         if (lastIndex < text.length) {
-            appendStyles(text.substring(lastIndex))
+            appendStyles(text.substring(lastIndex), isDark)
         }
     }
 
@@ -431,9 +433,9 @@ fun StyledText(
         style = TextStyle(
             color = color,
             fontSize = fontSize,
-            lineHeight = lineHeight,
-            fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
-            fontFamily = FontFamily.Default
+            lineHeight = 26.sp, // Amharic Readability
+            fontFamily = FontFamily.Default,
+            fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
         ),
         onClick = { offset ->
             annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
@@ -441,84 +443,97 @@ fun StyledText(
                     try {
                         uriHandler.openUri(annotation.item)
                     } catch (e: Exception) {
-                        // ሊንኩ ባይሰራ ዝም በል
+                        e.printStackTrace()
                     }
                 }
         }
     )
 }
 
-/**
- * Helper to process Bold (**), Italic (*), and Inline Code (`)
- */
-fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String) {
-    // Regex for Bold, Italic, and Inline Code
-    val combinedRegex = "(\\*\\*.*?\\*\\*)|(\\*.*?\\*)|(`.*?`)".toRegex()
+// --- HELPER: ADVANCED INLINE STYLES ---
+// Handles: **Bold**, *Italic*, and `Inline Code`
+fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
+    // Regex matches: `code`, **bold**, or *italic*
+    // The order allows us to catch code blocks first
+    val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*)".toRegex()
+    
     var lastIndex = 0
 
-    combinedRegex.findAll(rawText).forEach { match ->
-        val start = match.range.first
-        val end = match.range.last + 1
+    pattern.findAll(rawText).forEach { match ->
+        // Text before the style
+        append(rawText.substring(lastIndex, match.range.first))
 
-        // ከስታይሉ በፊት ያለውን ተራ ጽሁፍ ጨምር
-        append(rawText.substring(lastIndex, start))
-
-        val token = match.value
+        val content = match.value
         when {
-            // Bold: **text**
-            token.startsWith("**") && token.endsWith("**") -> {
+            // INLINE CODE (`text`)
+            content.startsWith("`") -> {
+                val cleanText = content.removeSurrounding("`")
+                withStyle(
+                    SpanStyle(
+                        background = if (isDark) Color(0xFF3E3E3E) else Color(0xFFE5E7EB), // Background Box
+                        color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 14.sp
+                    )
+                ) {
+                    append(" $cleanText ") // Add padding via spaces
+                }
+            }
+            // BOLD (**text**)
+            content.startsWith("**") -> {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append(token.removeSurrounding("**"))
+                    append(content.removeSurrounding("**"))
                 }
             }
-            // Italic: *text*
-            token.startsWith("*") && token.endsWith("*") -> {
+            // ITALIC (*text*)
+            content.startsWith("*") -> {
                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                    append(token.removeSurrounding("*"))
-                }
-            }
-            // Inline Code: `text`
-            token.startsWith("`") && token.endsWith("`") -> {
-                withStyle(SpanStyle(
-                    fontFamily = FontFamily.Monospace,
-                    background = Color.Gray.copy(alpha = 0.2f),
-                    color = Color(0xFFE57373) // Slightly red/pink for inline code visibility
-                )) {
-                    append(token.removeSurrounding("`"))
+                    append(content.removeSurrounding("*"))
                 }
             }
         }
-        lastIndex = end
+        lastIndex = match.range.last + 1
     }
-    // የቀረውን ጽሁፍ ጨምር
+    
+    // Remaining text after the last match
     append(rawText.substring(lastIndex))
 }
 
-// --- NEW: TABLE SUPPORT ---
+// --- COMPONENT: MARKDOWN TABLE ---
 @Composable
 fun MarkdownTable(rows: List<List<String>>, isDark: Boolean) {
     val borderColor = if (isDark) Color.Gray.copy(alpha = 0.3f) else Color.LightGray
+    val headerColor = if (isDark) Color(0xFF2D2E35) else Color(0xFFF3F4F6)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .clip(RoundedCornerShape(8.dp))
             .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .horizontalScroll(rememberScrollState())
     ) {
         rows.forEachIndexed { index, row ->
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .background(if (index == 0) headerColor else Color.Transparent)
+                    .fillMaxWidth()
+            ) {
                 row.forEach { cell ->
                     Box(
                         modifier = Modifier
-                            .padding(8.dp)
-                            .widthIn(min = 100.dp)
+                            .widthIn(min = 120.dp) // Proper minimum width
+                            .padding(12.dp)
+                            .border(width = 0.5.dp, color = borderColor.copy(alpha = 0.1f))
                     ) {
+                        // Recursive call: Allows Bold/Links inside Table Cells!
                         StyledText(text = cell, isDark = isDark, fontSize = 14.sp)
                     }
                 }
             }
             if (index < rows.size - 1) {
-                Divider(color = borderColor, thickness = 0.5.dp)
+                Divider(color = borderColor, thickness = 1.dp)
             }
         }
     }
 }
+       
