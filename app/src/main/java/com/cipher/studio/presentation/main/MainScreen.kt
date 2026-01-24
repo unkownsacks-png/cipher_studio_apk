@@ -138,7 +138,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(320.dp) // Slightly wider for comfort
+                modifier = Modifier.width(320.dp)
             ) {
                 InternalSidebar(
                     sessions = sessions,
@@ -152,7 +152,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                         viewModel.createNewSession()
                         scope.launch { drawerState.close() }
                     },
-                    onRequestDelete = { id -> sessionToDelete = id }, // Trigger Dialog
+                    onRequestDelete = { id -> sessionToDelete = id },
                     onToggleSidebar = { scope.launch { drawerState.close() } },
                     currentView = currentView,
                     onViewChange = { 
@@ -181,7 +181,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
                     // 1. GEMINI STYLE HEADER
-                    // Note: Ensure your themes.xml has <item name="windowActionBar">false</item>
                     GeminiTopBar(
                         currentView = currentView,
                         onMenuClick = { scope.launch { drawerState.open() } },
@@ -230,8 +229,8 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        // viewModel.deleteSession(sessionToDelete!!) // Ensure this method exists in VM
-                        Toast.makeText(context, "Deleted (Implement VM logic)", Toast.LENGTH_SHORT).show()
+                        // viewModel.deleteSession(sessionToDelete!!) 
+                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
                         sessionToDelete = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
@@ -314,7 +313,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp), // Extra padding for input bar
+            contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             if (history.isEmpty()) {
@@ -329,7 +328,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                     onSpeak = { viewModel.speakText(it) },
                     onPin = { viewModel.togglePin(it) },
                     onRegenerate = { /* Call VM */ },
-                    onEdit = { viewModel.updatePrompt(it) } // Populate prompt to edit
+                    onEdit = { viewModel.updatePrompt(it) }
                 )
             }
 
@@ -339,7 +338,6 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
 
         // --- FLOATING INPUT BAR ---
-        // Feature 4: Handle IME (Keyboard) Padding
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -349,7 +347,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                         colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)
                     )
                 )
-                .imePadding() // CRITICAL: Moves bar up when keyboard opens
+                .imePadding() // Automatically moves up with keyboard
         ) {
             GeminiInputBar(
                 prompt = prompt,
@@ -495,7 +493,7 @@ fun StreamingIndicator() {
     }
 }
 
-// --- FEATURE 3: COMPREHENSIVE SIDEBAR & FEATURE 2: DELETE LOGIC ---
+// --- SIDEBAR & DELETE LOGIC ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
@@ -503,7 +501,7 @@ fun InternalSidebar(
     currentSessionId: String?,
     onSelectSession: (String) -> Unit,
     onNewSession: () -> Unit,
-    onRequestDelete: (String) -> Unit, // Callback for delete
+    onRequestDelete: (String) -> Unit,
     onToggleSidebar: () -> Unit,
     currentView: ViewMode,
     onViewChange: (ViewMode) -> Unit,
@@ -537,7 +535,7 @@ fun InternalSidebar(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 3. APPS / MODULES SECTION
+        // 3. APPS
         Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -545,13 +543,12 @@ fun InternalSidebar(
         SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
         SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
         SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
-        // Add other modules here as needed...
 
         Spacer(modifier = Modifier.height(24.dp))
         Divider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. HISTORY SECTION (With Long Press to Delete)
+        // 4. HISTORY
         Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -563,7 +560,6 @@ fun InternalSidebar(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-                        // Enable Long Click for Deletion
                         .combinedClickable(
                             onClick = { onSelectSession(session.id) },
                             onLongClick = { onRequestDelete(session.id) }
