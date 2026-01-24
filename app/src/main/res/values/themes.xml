@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- የ App-u ስም እዚህ ጋር ነው ያለው -->
+    <!-- ይህ ኮድ ያንን ጥቁር Action Bar ያጠፋዋል -->
     <style name="Theme.CipherStudio" parent="android:Theme.Material.Light.NoActionBar">
-        <!-- 1. Action Bar እና Title Bar እናጠፋለን -->
-        <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
-
-        <!-- 2. Status Bar (የባትሪ እና ሰዓት ቦታ) -->
-        <!-- በ Compose ውስጥ ስለምንቆጣጠረው እዚህ ጋር ገለልተኛ እናደርገዋለን -->
+        <item name="android:windowActionBar">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
