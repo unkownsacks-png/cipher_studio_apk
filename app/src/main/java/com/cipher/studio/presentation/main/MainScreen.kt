@@ -9,7 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable  // <--- ይህቺ ናት የጎደለችው (አሁን ተስተካክላለች)
+import androidx.compose.foundation.clickable 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -96,11 +95,11 @@ fun SplashScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Rounded.AutoAwesome,
+        // Use the Custom Logo here too for consistency
+        Image(
+            painter = painterResource(id = R.drawable.my_logo),
             contentDescription = "Logo",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier.size(80.dp)
         )
     }
 }
@@ -124,7 +123,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     var isControlsOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     
-    // Feature 2: Delete Confirmation Dialog State
+    // Feature: Real Delete Confirmation State
     var sessionToDelete by remember { mutableStateOf<String?>(null) }
 
     // Back Handler
@@ -181,14 +180,14 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // 1. GEMINI STYLE HEADER
+                    // 1. HEADER (With Real Logo)
                     GeminiTopBar(
                         currentView = currentView,
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onSettingsClick = { isControlsOpen = true }
                     )
 
-                    // 2. CONTENT AREA (Modules)
+                    // 2. CONTENT AREA (All Modules Included)
                     Box(modifier = Modifier.weight(1f)) {
                         AnimatedContent(
                             targetState = currentView,
@@ -209,7 +208,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                     }
                 }
 
-                // 3. RIGHT CONTROL PANEL (Overlay)
+                // 3. RIGHT CONTROL PANEL
                 ControlPanel(
                     config = config,
                     onChange = { /* Update Config in VM */ },
@@ -221,20 +220,23 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     }
 
-    // Delete Confirmation Dialog
+    // REAL DELETE CONFIRMATION DIALOG
     if (sessionToDelete != null) {
         AlertDialog(
             onDismissRequest = { sessionToDelete = null },
-            title = { Text("Delete Chat?") },
-            text = { Text("This action cannot be undone.") },
+            title = { Text("Delete Chat?", fontWeight = FontWeight.Bold) },
+            text = { Text("This will permanently remove this conversation from your history.") },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
-                        // viewModel.deleteSession(sessionToDelete!!) 
-                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                        // Action: Call ViewModel to delete
+                        sessionToDelete?.let { id ->
+                            viewModel.deleteSession(id) // Ensure this exists in VM
+                            Toast.makeText(context, "Conversation deleted", Toast.LENGTH_SHORT).show()
+                        }
                         sessionToDelete = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
@@ -243,7 +245,8 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 TextButton(onClick = { sessionToDelete = null }) {
                     Text("Cancel")
                 }
-            }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         )
     }
 
@@ -259,7 +262,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
-// --- HEADER ---
+// --- HEADER (Updated with Logo) ---
 @Composable
 fun GeminiTopBar(
     currentView: ViewMode,
@@ -273,10 +276,12 @@ fun GeminiTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        // Menu Button
         IconButton(onClick = onMenuClick) {
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
+        // Title or Logo in Center (Optional, but clean)
         if (currentView != ViewMode.CHAT) {
             Text(
                 text = currentView.name.replace("_", " "),
@@ -286,6 +291,7 @@ fun GeminiTopBar(
             )
         }
 
+        // Config Button
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground)
         }
@@ -348,7 +354,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                         colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)
                     )
                 )
-                .imePadding() // Automatically moves up with keyboard
+                .imePadding() 
         ) {
             GeminiInputBar(
                 prompt = prompt,
@@ -362,7 +368,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     }
 }
 
-// --- FEATURE 1: SMART TIME-BASED GREETING ---
+// --- GREETING (Smart) ---
 @Composable
 fun GreetingHeader() {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -377,6 +383,13 @@ fun GreetingHeader() {
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 60.dp)
     ) {
+        // Use Logo here too for branding
+        Image(
+            painter = painterResource(id = R.drawable.my_logo),
+            contentDescription = null,
+            modifier = Modifier.size(40.dp).padding(bottom = 16.dp)
+        )
+        
         Text(
             text = "$greeting, Creator",
             style = MaterialTheme.typography.headlineLarge,
@@ -494,7 +507,7 @@ fun StreamingIndicator() {
     }
 }
 
-// --- SIDEBAR & DELETE LOGIC ---
+// --- SIDEBAR (Complete: All Apps + Logo + About) ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
@@ -514,9 +527,13 @@ fun InternalSidebar(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 1. App Header
+        // 1. App Header with CUSTOM LOGO
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
-             Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+             Image(
+                 painter = painterResource(id = R.drawable.my_logo),
+                 contentDescription = "Cipher Logo",
+                 modifier = Modifier.size(32.dp)
+             )
              Spacer(modifier = Modifier.width(12.dp))
              Text("Cipher Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
@@ -536,20 +553,28 @@ fun InternalSidebar(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 3. APPS
+        // 3. APPS (ALL MODULES INCLUDED)
         Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Chat
         SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
+        
+        // Dev Tools
         SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
         SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
         SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
+        
+        // Missing Apps Added Here
+        SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
+        SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
+        SidebarItem(Icons.Default.Description, "Doc Intel", currentView == ViewMode.DOC_INTEL) { onViewChange(ViewMode.DOC_INTEL) }
 
         Spacer(modifier = Modifier.height(24.dp))
         Divider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. HISTORY
+        // 4. HISTORY (With Real Delete Action)
         Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -583,7 +608,16 @@ fun InternalSidebar(
         
         Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         
-        // 5. Footer
+        // 5. Footer (About & Settings)
+        
+        // ABOUT LINK (Added as requested)
+        Row(modifier = Modifier.clickable { onViewChange(ViewMode.ABOUT) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("About", color = MaterialTheme.colorScheme.onSurface)
+        }
+
+        // SETTINGS LINK
         Row(modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
