@@ -1,6 +1,5 @@
 package com.cipher.studio.presentation.components
 
-import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.BrokenImage
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +35,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.cipher.studio.domain.model.Theme
@@ -100,7 +97,8 @@ fun MarkdownRenderer(
                 }
                 is MarkdownBlock.Quote -> {
                     // NEW: Block Quote Support (>)
-                    Row(modifier = Modifier.intrinsicHeight(IntrinsicSize.Min)) {
+                    // FIX: Changed intrinsicHeight to height(IntrinsicSize.Min)
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                         Box(
                             modifier = Modifier
                                 .width(4.dp)
@@ -320,14 +318,14 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         var lastIndex = 0
         // We iterate char by char effectively (mocking a lexer) by matching all regexes
         // For simplicity in this robust version, we'll apply layers.
-        
+
         append(str) // Base text
 
         // 1. Strings (Green)
         stringRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
         }
-        
+
         // 2. Keywords (Orange/Purple)
         keywordsRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
@@ -342,7 +340,7 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         commentRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
         }
-        
+
         // Base Color
         addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, str.length)
     }
@@ -394,11 +392,11 @@ fun StyledText(
 
     val annotatedString = buildAnnotatedString {
         // Recursively apply styles: Link -> Code -> Bold -> Italic
-        
+
                 // 1. LINKS [text](url) - handle Amharic chars [^\]]+
         val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
         var lastIndex = 0
-        
+
         linkRegex.findAll(text).forEach { matchResult ->
             val start = matchResult.range.first
             val end = matchResult.range.last + 1
@@ -418,10 +416,10 @@ fun StyledText(
                 append(linkText)
             }
             pop()
-            
+
             lastIndex = end
         }
-        
+
         // ቀሪውን ጽሁፍ ጨምር
         if (lastIndex < text.length) {
             appendStyles(text.substring(lastIndex))
@@ -461,10 +459,10 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
     combinedRegex.findAll(rawText).forEach { match ->
         val start = match.range.first
         val end = match.range.last + 1
-        
+
         // ከስታይሉ በፊት ያለውን ተራ ጽሁፍ ጨምር
         append(rawText.substring(lastIndex, start))
-        
+
         val token = match.value
         when {
             // Bold: **text**
@@ -494,4 +492,33 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
     }
     // የቀረውን ጽሁፍ ጨምር
     append(rawText.substring(lastIndex))
+}
+
+// --- NEW: TABLE SUPPORT ---
+@Composable
+fun MarkdownTable(rows: List<List<String>>, isDark: Boolean) {
+    val borderColor = if (isDark) Color.Gray.copy(alpha = 0.3f) else Color.LightGray
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+    ) {
+        rows.forEachIndexed { index, row ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEach { cell ->
+                    Box(
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .widthIn(min = 100.dp)
+                    ) {
+                        StyledText(text = cell, isDark = isDark, fontSize = 14.sp)
+                    }
+                }
+            }
+            if (index < rows.size - 1) {
+                Divider(color = borderColor, thickness = 0.5.dp)
+            }
+        }
+    }
 }
