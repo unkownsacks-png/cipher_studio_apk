@@ -1,25 +1,34 @@
 package com.cipher.studio.presentation.components
 
 import android.widget.Toast
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.BrokenImage
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -28,278 +37,461 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.cipher.studio.domain.model.Theme
-import java.util.regex.Pattern
+import kotlinx.coroutines.delay
 
 /**
- * A High-Performance Native Markdown & Code Renderer.
- * Optimized for Streaming Text (Gemini) to prevent UI jitter.
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER
+ * Features:
+ * 1. Syntax Highlighting (Keywords, Strings, Numbers)
+ * 2. Full Inline Styles (Bold, Italic, Inline Code, Links)
+ * 3. Amharic Optimization (LineHeight & Regex)
+ * 4. macOS Style Code Blocks
+ * 5. Optimized Tables & Headers
  */
 @Composable
 fun MarkdownRenderer(
     content: String,
     theme: Theme,
-    onFocusMode: Boolean = false,
-    isStreaming: Boolean = false
+    isStreaming: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
-    val isDark = theme == Theme.DARK
-    val textColor = if (isDark) Color(0xFFE4E4E7) else Color(0xFF1F2937)
+    // 1. Optimized Parsing with derivedStateOf to prevent jank during streaming
+    val blocks by remember(content) {
+        derivedStateOf { parseMarkdownBlocks(content) }
+    }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp) // Better spacing for readability
     ) {
-        // Parse content into blocks (Code vs Text)
-        val blocks = remember(content) { parseMarkdownBlocks(content) }
-
         blocks.forEach { block ->
             when (block) {
-                is MarkdownBlock.CodeBlock -> {
-                    CodeBlockView(
-                        language = block.language,
-                        code = block.code,
-                        isDark = isDark,
-                        isStreaming = isStreaming
+                is MarkdownBlock.Header -> {
+                    // NEW: Header Support (# H1, ## H2)
+                    Text(
+                        text = block.text,
+                        style = when (block.level) {
+                            1 -> MaterialTheme.typography.headlineMedium
+                            2 -> MaterialTheme.typography.titleLarge
+                            else -> MaterialTheme.typography.titleMedium
+                        }.copy(fontWeight = FontWeight.Bold),
+                        color = if (theme == Theme.DARK) Color(0xFFE3E3E3) else Color(0xFF1F1F1F)
                     )
                 }
-                is MarkdownBlock.TextBlock -> {
-                    if (block.text.isNotBlank()) {
-                        SelectionContainer {
-                            Text(
-                                text = parseRichText(block.text, isDark),
-                                color = textColor,
-                                fontSize = 15.sp,
-                                lineHeight = 24.sp,
-                                fontFamily = FontFamily.Default,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
+                is MarkdownBlock.Code -> {
+                    EliteCodeBlock(
+                        language = block.language,
+                        code = block.content,
+                        isDark = theme == Theme.DARK
+                    )
+                }
+                is MarkdownBlock.Table -> {
+                    MarkdownTable(
+                        rows = block.rows,
+                        isDark = theme == Theme.DARK
+                    )
+                }
+                is MarkdownBlock.Image -> {
+                    EliteImage(url = block.url, alt = block.altText)
+                }
+                is MarkdownBlock.Quote -> {
+                    // NEW: Block Quote Support (>)
+                    Row(modifier = Modifier.intrinsicHeight(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .fillMaxHeight()
+                                .background(Color(0xFF6B7280), RoundedCornerShape(2.dp))
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        StyledText(text = block.content, isDark = theme == Theme.DARK, fontSize = 16.sp, isItalic = true)
                     }
+                }
+                is MarkdownBlock.Rule -> {
+                    // NEW: Horizontal Rule (---)
+                    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+                }
+                is MarkdownBlock.Text -> {
+                    StyledText(
+                        text = block.content,
+                        isDark = theme == Theme.DARK
+                    )
                 }
             }
         }
     }
 }
 
-// --- Component: Code Block (The macOS Style Window) ---
-@Composable
-fun CodeBlockView(
-    language: String,
-    code: String,
-    isDark: Boolean,
-    isStreaming: Boolean
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    var isCopied by remember { mutableStateOf(false) }
-
-    val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
-    val bgColor = if (isDark) Color(0xFF0D0D0D) else Color.White
-    val headerBg = if (isDark) Color(0xFF18181B) else Color(0xFFF9FAFB)
-    val codeColor = if (isDark) Color(0xFFE4E4E7) else Color(0xFF1F2937)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-            .background(bgColor)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(headerBg)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Language Label
-            Text(
-                text = language.ifBlank { "text" },
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
-
-            // Copy Button
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f))
-                    .clickable {
-                        clipboardManager.setText(AnnotatedString(code))
-                        isCopied = true
-                        if (!isStreaming) {
-                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                        }
-                        // Reset copy icon after 2 seconds (handled via LaunchedEffect usually, simplified here)
-                    }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-                    contentDescription = "Copy",
-                    tint = if (isCopied) Color(0xFF4ADE80) else Color.Gray,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isCopied) "Copied" else "Copy",
-                    fontSize = 10.sp,
-                    color = if (isCopied) Color(0xFF4ADE80) else Color.Gray,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        // Code Content
-        SelectionContainer {
-            if (isStreaming) {
-                // No heavy syntax highlighting during streaming for performance
-                Text(
-                    text = code,
-                    color = codeColor,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(16.dp)
-                )
-            } else {
-                Text(
-                    text = highlightSyntax(code, isDark),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
-    }
-}
-
-// --- Logic: Markdown Parsing ---
-
+// --- DATA STRUCTURES ---
 sealed class MarkdownBlock {
-    data class TextBlock(val text: String) : MarkdownBlock()
-    data class CodeBlock(val language: String, val code: String) : MarkdownBlock()
+    data class Header(val text: String, val level: Int) : MarkdownBlock()
+    data class Text(val content: String) : MarkdownBlock()
+    data class Code(val language: String, val content: String) : MarkdownBlock()
+    data class Table(val rows: List<List<String>>) : MarkdownBlock()
+    data class Image(val url: String, val altText: String) : MarkdownBlock()
+    data class Quote(val content: String) : MarkdownBlock()
+    object Rule : MarkdownBlock()
 }
 
-fun parseMarkdownBlocks(input: String): List<MarkdownBlock> {
+// --- PARSER LOGIC ---
+fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
-    // Regex matches ```language code ```
-    val codeBlockRegex = Pattern.compile("```(\\w*)\\n?([\\s\\S]*?)\\n?```")
-    val matcher = codeBlockRegex.matcher(input)
+    val lines = text.lines()
+    var i = 0
 
-    var lastIndex = 0
+    while (i < lines.size) {
+        val line = lines[i]
+        val trimmed = line.trim()
 
-    while (matcher.find()) {
-        val start = matcher.start()
-        val end = matcher.end()
-
-        if (start > lastIndex) {
-            blocks.add(MarkdownBlock.TextBlock(input.substring(lastIndex, start)))
+        // 1. Code Block
+        if (trimmed.startsWith("```")) {
+            val language = trimmed.removePrefix("```").trim()
+            val codeBuilder = StringBuilder()
+            i++
+            while (i < lines.size && !lines[i].trim().startsWith("```")) {
+                codeBuilder.append(lines[i]).append("\n")
+                i++
+            }
+            blocks.add(MarkdownBlock.Code(language, codeBuilder.toString().trimEnd()))
+            i++
+            continue
         }
 
-        val lang = matcher.group(1) ?: ""
-        val code = matcher.group(2) ?: ""
-        blocks.add(MarkdownBlock.CodeBlock(lang.trim(), code.trim()))
+        // 2. Table
+        if (trimmed.startsWith("|")) {
+            val tableRows = mutableListOf<List<String>>()
+            while (i < lines.size && lines[i].trim().startsWith("|")) {
+                val row = lines[i].split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                if (!row.any { it.contains("---") }) { // Skip separator
+                    tableRows.add(row)
+                }
+                i++
+            }
+            if (tableRows.isNotEmpty()) blocks.add(MarkdownBlock.Table(tableRows))
+            continue
+        }
 
-        lastIndex = end
+        // 3. Headers (#)
+        if (trimmed.startsWith("#")) {
+            val level = trimmed.takeWhile { it == '#' }.length
+            val content = trimmed.removePrefix("#".repeat(level)).trim()
+            blocks.add(MarkdownBlock.Header(content, level))
+            i++
+            continue
+        }
+
+        // 4. Block Quotes (>)
+        if (trimmed.startsWith(">")) {
+            val content = trimmed.removePrefix(">").trim()
+            blocks.add(MarkdownBlock.Quote(content))
+            i++
+            continue
+        }
+
+        // 5. Horizontal Rule (--- or ***)
+        if (trimmed == "---" || trimmed == "***") {
+            blocks.add(MarkdownBlock.Rule)
+            i++
+            continue
+        }
+
+        // 6. Images
+        val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
+        if (imgMatch != null) {
+            blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1]))
+            i++
+            continue
+        }
+
+        // 7. Regular Text (Grouped)
+        val textBuilder = StringBuilder()
+        while (i < lines.size) {
+            val nextTrim = lines[i].trim()
+            if (nextTrim.startsWith("```") || nextTrim.startsWith("|") || nextTrim.startsWith("#") || nextTrim.startsWith(">") || nextTrim == "---") break
+            textBuilder.append(lines[i]).append("\n")
+            i++
+        }
+        if (textBuilder.isNotEmpty()) {
+            blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd()))
+        }
     }
-
-    if (lastIndex < input.length) {
-        blocks.add(MarkdownBlock.TextBlock(input.substring(lastIndex)))
-    }
-
     return blocks
 }
 
-/**
- * Rich Text Parser (Bold, Italic, Inline Code, Link)
- */
+// --- ELITE CODE BLOCK (With Syntax Highlighting) ---
 @Composable
-fun parseRichText(text: String, isDark: Boolean): AnnotatedString {
-    return buildAnnotatedString {
-        val boldStyle = SpanStyle(fontWeight = FontWeight.Bold)
-        val italicStyle = SpanStyle(fontStyle = FontStyle.Italic)
-        val codeStyle = SpanStyle(
-            fontFamily = FontFamily.Monospace,
-            background = if (isDark) Color(0xFF1E1E1E) else Color(0xFFF3F4F6),
-            color = if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8),
-            fontSize = 13.sp
-        )
-        // Note: Simple manual parsing. For nested markdown, a library is better, 
-        // but this regex covers 90% of chat use cases.
-        val parts = text.split(Regex("(?=(\\*\\*|`|http))|(?<=(\\*\\*|`))"))
-        
-        var isBold = false
-        var isCode = false
-        
-        parts.forEach { part ->
-            when {
-                part == "**" -> isBold = !isBold
-                part == "`" -> isCode = !isCode
-                else -> {
-                    if (isCode) withStyle(codeStyle) { append(part) }
-                    else if (isBold) withStyle(boldStyle) { append(part) }
-                    else if (part.startsWith("http")) {
-                        withStyle(SpanStyle(color = Color(0xFF3B82F6), textDecoration = TextDecoration.Underline)) {
-                            append(part)
-                        }
+fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
+    val clipboardManager = LocalClipboardManager.current
+    var isCopied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isCopied) {
+        if (isCopied) {
+            delay(2000)
+            isCopied = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF1E1E1E))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+    ) {
+        // macOS Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF2D2D2D))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFF5F56), CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFFBD2E), CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFF27C93F), CircleShape))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = language.ifEmpty { "CODE" }.uppercase(),
+                    style = TextStyle(color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable {
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(code))
+                        isCopied = true
                     }
-                    else append(part)
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Crossfade(targetState = isCopied, label = "Copy") { copied ->
+                    Icon(
+                        imageVector = if (copied) Icons.Default.Check else Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = if (copied) Color(0xFF4CAF50) else Color.Gray,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
+            }
+        }
+
+        // Code Content with Syntax Highlighting
+        SelectionContainer {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                // Apply Highlighting
+                Text(
+                    text = syntaxHighlight(code),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp
+                    )
+                )
             }
         }
     }
 }
 
-/**
- * Basic Syntax Highlighter (Keywords, Strings, Comments)
- */
-fun highlightSyntax(code: String, isDark: Boolean): AnnotatedString {
+// --- NEW: SYNTAX HIGHLIGHTER LOGIC ---
+fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
-        val defaultColor = if (isDark) Color(0xFFE4E4E7) else Color(0xFF1F2937)
-        val keywordColor = if (isDark) Color(0xFFC586C0) else Color(0xFFAF00DB)
-        val stringColor = if (isDark) Color(0xFFCE9178) else Color(0xFFA31515)
-        val commentColor = if (isDark) Color(0xFF6A9955) else Color(0xFF008000)
-        val numberColor = if (isDark) Color(0xFFB5CEA8) else Color(0xFF098658)
+        val str = code
+        // Simple Regex Tokenizer for common keywords
+        val keywords = listOf("fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", "package", "import", "def", "function", "const", "let")
+        val keywordsRegex = "\\b(${keywords.joinToString("|")})\\b".toRegex()
+        val stringRegex = "\".*?\"".toRegex()
+        val numberRegex = "\\b\\d+\\b".toRegex()
+        val commentRegex = "//.*".toRegex()
 
-        val keywords = listOf(
-            "function", "return", "var", "let", "const", "if", "else", "for", "while",
-            "import", "from", "export", "default", "class", "extends", "true", "false",
-            "null", "undefined", "this", "new", "try", "catch", "async", "await",
-            "fun", "val", "package", "override", "private", "public", "interface"
-        )
-
-        // Simple tokenizer
-        val tokenRegex = Regex("(\".*?\")|('.*?')|(//.*)|(/\\*.*?\\*/)|(\\b\\d+\\b)|(\\b[a-zA-Z_]\\w*\\b)|(\\S)")
+        var lastIndex = 0
+        // We iterate char by char effectively (mocking a lexer) by matching all regexes
+        // For simplicity in this robust version, we'll apply layers.
         
-        val matches = tokenRegex.findAll(code)
+        append(str) // Base text
+
+        // 1. Strings (Green)
+        stringRegex.findAll(str).forEach { match ->
+            addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
+        }
+        
+        // 2. Keywords (Orange/Purple)
+        keywordsRegex.findAll(str).forEach { match ->
+            addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
+        }
+
+        // 3. Numbers (Blue)
+        numberRegex.findAll(str).forEach { match ->
+            addStyle(SpanStyle(color = Color(0xFF79C0FF)), match.range.first, match.range.last + 1)
+        }
+
+        // 4. Comments (Grey) - Override everything else
+        commentRegex.findAll(str).forEach { match ->
+            addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
+        }
+        
+        // Base Color
+        addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, str.length)
+    }
+}
+
+// --- ELITE IMAGE (With Loading State) ---
+@Composable
+fun EliteImage(url: String, alt: String) {
+    SubcomposeAsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(url)
+            .crossfade(true)
+            .build(),
+        contentDescription = alt,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Gray.copy(alpha = 0.1f)),
+        loading = {
+            Box(modifier = Modifier.height(200.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        },
+        error = {
+            Column(
+                modifier = Modifier.height(150.dp).fillMaxWidth(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Outlined.BrokenImage, null, tint = Color.Gray)
+                Text("Failed to load image", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        },
+        contentScale = ContentScale.Crop
+    )
+}
+
+// --- STYLED TEXT (Full Markdown Support) ---
+@Composable
+fun StyledText(
+    text: String,
+    isDark: Boolean,
+    fontSize: androidx.compose.ui.unit.TextUnit = 16.sp,
+    isItalic: Boolean = false
+) {
+    val uriHandler = LocalUriHandler.current
+    val color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F)
+    val lineHeight = 26.sp
+
+    val annotatedString = buildAnnotatedString {
+        // Recursively apply styles: Link -> Code -> Bold -> Italic
+        
+                // 1. LINKS [text](url) - handle Amharic chars [^\]]+
+        val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
         var lastIndex = 0
         
-        matches.forEach { match ->
-            if (match.range.first > lastIndex) {
-                withStyle(SpanStyle(color = defaultColor)) { append(code.substring(lastIndex, match.range.first)) }
-            }
+        linkRegex.findAll(text).forEach { matchResult ->
+            val start = matchResult.range.first
+            val end = matchResult.range.last + 1
+            val linkText = matchResult.groupValues[1]
+            val linkUrl = matchResult.groupValues[2]
 
-            val value = match.value
-            when {
-                value.startsWith("\"") || value.startsWith("'") -> withStyle(SpanStyle(color = stringColor)) { append(value) }
-                value.startsWith("/") -> withStyle(SpanStyle(color = commentColor)) { append(value) }
-                value.toIntOrNull() != null -> withStyle(SpanStyle(color = numberColor)) { append(value) }
-                keywords.contains(value) -> withStyle(SpanStyle(color = keywordColor)) { append(value) }
-                else -> withStyle(SpanStyle(color = defaultColor)) { append(value) }
+            // ከሊንኩ በፊት ያለውን ጽሁፍ በስታይል ጨምር
+            appendStyles(text.substring(lastIndex, start))
+
+            // ሊንኩን ጨምር
+            pushStringAnnotation(tag = "URL", annotation = linkUrl)
+            withStyle(SpanStyle(
+                color = Color(0xFF3B82F6), 
+                textDecoration = TextDecoration.Underline,
+                fontWeight = FontWeight.Medium
+            )) {
+                append(linkText)
             }
-            lastIndex = match.range.last + 1
+            pop()
+            
+            lastIndex = end
         }
         
-        if (lastIndex < code.length) {
-            withStyle(SpanStyle(color = defaultColor)) { append(code.substring(lastIndex)) }
+        // ቀሪውን ጽሁፍ ጨምር
+        if (lastIndex < text.length) {
+            appendStyles(text.substring(lastIndex))
         }
     }
+
+    ClickableText(
+        text = annotatedString,
+        style = TextStyle(
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+            fontFamily = FontFamily.Default
+        ),
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    try {
+                        uriHandler.openUri(annotation.item)
+                    } catch (e: Exception) {
+                        // ሊንኩ ባይሰራ ዝም በል
+                    }
+                }
+        }
+    )
+}
+
+/**
+ * Helper to process Bold (**), Italic (*), and Inline Code (`)
+ */
+fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String) {
+    // Regex for Bold, Italic, and Inline Code
+    val combinedRegex = "(\\*\\*.*?\\*\\*)|(\\*.*?\\*)|(`.*?`)".toRegex()
+    var lastIndex = 0
+
+    combinedRegex.findAll(rawText).forEach { match ->
+        val start = match.range.first
+        val end = match.range.last + 1
+        
+        // ከስታይሉ በፊት ያለውን ተራ ጽሁፍ ጨምር
+        append(rawText.substring(lastIndex, start))
+        
+        val token = match.value
+        when {
+            // Bold: **text**
+            token.startsWith("**") && token.endsWith("**") -> {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                    append(token.removeSurrounding("**"))
+                }
+            }
+            // Italic: *text*
+            token.startsWith("*") && token.endsWith("*") -> {
+                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                    append(token.removeSurrounding("*"))
+                }
+            }
+            // Inline Code: `text`
+            token.startsWith("`") && token.endsWith("`") -> {
+                withStyle(SpanStyle(
+                    fontFamily = FontFamily.Monospace,
+                    background = Color.Gray.copy(alpha = 0.2f),
+                    color = Color(0xFFE57373) // Slightly red/pink for inline code visibility
+                )) {
+                    append(token.removeSurrounding("`"))
+                }
+            }
+        }
+        lastIndex = end
+    }
+    // የቀረውን ጽሁፍ ጨምር
+    append(rawText.substring(lastIndex))
 }
