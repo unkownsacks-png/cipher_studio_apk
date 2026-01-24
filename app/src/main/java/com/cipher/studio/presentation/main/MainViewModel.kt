@@ -52,16 +52,16 @@ class MainViewModel @Inject constructor(
 
     private val _currentView = MutableStateFlow(ViewMode.CHAT)
     val currentView = _currentView.asStateFlow()
-    
+
     private val _isSidebarOpen = MutableStateFlow(false)
     val isSidebarOpen = _isSidebarOpen.asStateFlow()
 
     private val _sessions = MutableStateFlow<List<Session>>(emptyList())
     val sessions = _sessions.asStateFlow()
-    
+
     private val _currentSessionId = MutableStateFlow<String?>(null)
     val currentSessionId = _currentSessionId.asStateFlow()
-    
+
     private val _config = MutableStateFlow(AppConstants.DEFAULT_CONFIG)
     val config = _config.asStateFlow()
 
@@ -108,6 +108,25 @@ class MainViewModel @Inject constructor(
         _isSidebarOpen.value = false
     }
 
+    // --- NEW FIX: Added deleteSession Function ---
+    fun deleteSession(sessionId: String) {
+        // 1. ዝርዝሩ ውስጥ ያለውን ሴሽን አጥፋ
+        val updatedList = _sessions.value.filter { it.id != sessionId }
+        _sessions.value = updatedList
+        storageManager.saveSessions(updatedList)
+
+        // 2. የተሰረዘው ሴሽን አሁን እየተጠቀምንበት የነበረው ከሆነ፣ ወደ ሌላ መቀየር አለብን
+        if (_currentSessionId.value == sessionId) {
+            if (updatedList.isNotEmpty()) {
+                // ሌላ ካለ የመጀመሪያውን ክፈት
+                loadSession(updatedList.first())
+            } else {
+                // ሁሉም ከተሰረዙ አዲስ ባዶ ክፈት
+                createNewSession()
+            }
+        }
+    }
+
     private fun saveSessionsToDisk() {
         val currentId = _currentSessionId.value
         if (currentId != null) {
@@ -127,14 +146,14 @@ class MainViewModel @Inject constructor(
                 val context = getApplication<Application>().applicationContext
                 val inputStream = context.contentResolver.openInputStream(uri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
-                
+
                 if (bitmap != null) {
                     val outputStream = ByteArrayOutputStream()
                     // Compress image to avoid hitting token limits or memory issues
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
                     val byteArray = outputStream.toByteArray()
                     val base64String = Base64.encodeToString(byteArray, Base64.NO_WRAP)
-                    
+
                     val newAttachment = Attachment(mimeType = "image/jpeg", data = base64String)
                     withContext(Dispatchers.Main) {
                         _attachments.value = _attachments.value + newAttachment
@@ -156,7 +175,7 @@ class MainViewModel @Inject constructor(
         val attachmentsToUse = if (overridePrompt != null) emptyList() else _attachments.value
 
         if ((textToRun.isBlank() && attachmentsToUse.isEmpty()) || _isStreaming.value) return
-        
+
         val apiKey = apiKeyManager.getApiKey()
         if (apiKey.isNullOrBlank()) {
             addSystemMessage("⚠️ SYSTEM ALERT: No API Key found. Please add it in Settings.")
@@ -170,10 +189,10 @@ class MainViewModel @Inject constructor(
             timestamp = System.currentTimeMillis(),
             attachments = attachmentsToUse
         )
-        
+
         val currentHistory = _history.value + userMsg
         _history.value = currentHistory
-        
+
         // Reset Inputs
         if (overridePrompt == null) {
             _prompt.value = ""
@@ -197,7 +216,7 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             var fullResponse = ""
-            
+
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = userMsg.text,
@@ -247,5 +266,12 @@ class MainViewModel @Inject constructor(
     fun togglePin(id: String) { 
         _history.value = _history.value.map { if (it.id == id) it.copy(pinned = !it.pinned) else it }
         saveSessionsToDisk()
+    }
+    
+    // Suggestion: Add onCleared to prevent memory leaks from TTS
+    override fun onCleared() {
+        super.onCleared()
+        tts?.stop()
+        tts?.shutdown()
     }
 }
