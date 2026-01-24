@@ -1,28 +1,28 @@
 package com.cipher.studio.presentation.components
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Base64
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.VolumeUp
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.cipher.studio.domain.model.ChatMessage
@@ -45,16 +46,18 @@ fun ChatMessageItem(
     isStreaming: Boolean = false,
     onSpeak: ((String) -> Unit)? = null,
     onPin: ((String) -> Unit)? = null,
-    onRegenerate: (() -> Unit)? = null
+    onRegenerate: (() -> Unit)? = null,
+    onEdit: ((String) -> Unit)? = null // Added Edit Callback
 ) {
     val isUser = msg.role == ChatRole.USER
+    val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
     // --- GEMINI STYLE LAYOUT ---
     
     if (isUser) {
         // ==========================================
-        // USER MESSAGE STYLE (Modern Pill)
+        // USER MESSAGE STYLE (Modern Pill + Edit)
         // ==========================================
         Box(
             modifier = Modifier
@@ -62,26 +65,43 @@ fun ChatMessageItem(
                 .padding(vertical = 12.dp, horizontal = 16.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            Column(horizontalAlignment = Alignment.End) {
-                // Attachments (Images) for User
-                if (msg.attachments.isNotEmpty()) {
-                    UserAttachments(msg)
-                    Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                
+                // FEATURE 1: EDIT BUTTON (For User)
+                // Allows quick correction of prompts
+                IconButton(
+                    onClick = { onEdit?.invoke(msg.text) },
+                    modifier = Modifier.size(32.dp).padding(end = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
 
-                // The Text Pill
-                Surface(
-                    shape = RoundedCornerShape(24.dp), // Pill Shape
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), // Subtle Gray/Dark
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.widthIn(max = 340.dp)
-                ) {
-                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        Text(
-                            text = msg.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                Column(horizontalAlignment = Alignment.End) {
+                    // Attachments (Images) for User
+                    if (msg.attachments.isNotEmpty()) {
+                        UserAttachments(msg)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // The Text Pill
+                    Surface(
+                        shape = RoundedCornerShape(24.dp), 
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.widthIn(max = 340.dp)
+                    ) {
+                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            Text(
+                                text = msg.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -89,28 +109,18 @@ fun ChatMessageItem(
 
     } else {
         // ==========================================
-        // AI MESSAGE STYLE (Clean, No Bubble)
+        // AI MESSAGE STYLE (Clean, No Icon)
         // ==========================================
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 16.dp),
-            // FIXED: Used verticalAlignment instead of crossAxisAlignment
+                .padding(vertical = 8.dp, horizontal = 20.dp), // Increased padding since icon is gone
             verticalAlignment = Alignment.Top 
         ) {
-            // 1. The Gemini Icon (Sparkles)
-            Icon(
-                imageVector = Icons.Rounded.AutoAwesome,
-                contentDescription = "AI",
-                tint = if (isStreaming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(28.dp)
-                    .padding(top = 4.dp) // Align with first line of text
-            )
+            // REMOVED: The "Sparkle" Icon is gone. 
+            // Now it's just pure content flow like Gemini Web.
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 2. The Content & Actions
+            // The Content & Actions
             Column(modifier = Modifier.weight(1f)) {
                 
                 // AI Attachments (if any)
@@ -128,14 +138,28 @@ fun ChatMessageItem(
                     )
                 }
 
-                // 3. The Utility/Action Row (Floating below text)
-                // Only show if not streaming and text is not empty
+                // The Utility/Action Row (Floating below text)
                 if (!isStreaming && msg.text.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     AIActionRow(
-                        onCopy = { clipboardManager.setText(AnnotatedString(msg.text)) },
+                        text = msg.text,
+                        onCopy = { 
+                            clipboardManager.setText(AnnotatedString(msg.text))
+                            // FEATURE 4: CLIPBOARD FEEDBACK
+                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        },
                         onSpeak = { onSpeak?.invoke(msg.text) },
-                        onRegenerate = onRegenerate
+                        onRegenerate = onRegenerate,
+                        onShare = {
+                            // FEATURE 2: SHARE FUNCTIONALITY
+                            val sendIntent: Intent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, msg.text)
+                                type = "text/plain"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, null)
+                            context.startActivity(shareIntent)
+                        }
                     )
                 }
             }
@@ -147,10 +171,16 @@ fun ChatMessageItem(
 
 @Composable
 private fun AIActionRow(
+    text: String,
     onCopy: () -> Unit,
     onSpeak: () -> Unit,
+    onShare: () -> Unit,
     onRegenerate: (() -> Unit)?
 ) {
+    // FEATURE 3: INTERACTIVE STATE
+    var isLiked by remember { mutableStateOf(false) }
+    var isDisliked by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Start,
@@ -161,14 +191,35 @@ private fun AIActionRow(
         
         // Copy
         ActionIcon(icon = Icons.Outlined.ContentCopy, description = "Copy", onClick = onCopy)
+
+        // Share (NEW)
+        ActionIcon(icon = Icons.Outlined.Share, description = "Share", onClick = onShare)
         
-        // Thumbs (Placeholder for feedback)
-        ActionIcon(icon = Icons.Outlined.ThumbUp, description = "Good Response", onClick = {})
-        ActionIcon(icon = Icons.Outlined.ThumbDown, description = "Bad Response", onClick = {})
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // Thumbs Up (Interactive)
+        IconButton(onClick = { isLiked = !isLiked; isDisliked = false }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = if (isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                contentDescription = "Good",
+                tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        // Thumbs Down (Interactive)
+        IconButton(onClick = { isDisliked = !isDisliked; isLiked = false }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = if (isDisliked) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown,
+                contentDescription = "Bad",
+                tint = if (isDisliked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
         
         Spacer(modifier = Modifier.weight(1f))
         
-        // Regenerate (Optional)
+        // Regenerate
         if (onRegenerate != null) {
             ActionIcon(icon = Icons.Default.Refresh, description = "Regenerate", onClick = onRegenerate)
         }
@@ -183,13 +234,13 @@ private fun ActionIcon(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = Modifier.size(32.dp) // Smaller touch target
+        modifier = Modifier.size(32.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = description,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.size(18.dp) // Elegant small icons
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -212,7 +263,7 @@ private fun UserAttachments(msg: ChatMessage) {
                     contentDescription = "Attachment",
                     modifier = Modifier
                         .heightIn(max = 200.dp)
-                        .clip(RoundedCornerShape(12.dp)) // Modern rounded corners
+                        .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainer),
                     contentScale = ContentScale.FillWidth
                 )
