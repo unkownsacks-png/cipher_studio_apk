@@ -4,16 +4,16 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.horizontalScroll // Added Import
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollState // Added Import
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.rounded.ArrowForward
+// Removed explicit ArrowForward import to use Default accessor
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -241,8 +241,8 @@ fun CyberHouseScreen(
                         } else {
                             Text("Execute", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.width(8.dp))
-                            // FIXED ICON: Uses Default ArrowForward to ensure compatibility
-                            Icon(Icons.Filled.ArrowForward, null, modifier = Modifier.size(16.dp))
+                            // FIXED: Using Icons.Default.ArrowForward
+                            Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -302,7 +302,7 @@ fun CyberHouseScreen(
         // --- UTILITY MODE ---
         if (mode == ToolMode.UTILITY) {
             // 1. Utility Chips (FlowRow alternative using Scrollable Row)
-            // FIXED SCROLL: Added rememberScrollState
+            // FIXED: Added horizontalScroll(rememberScrollState())
              Row(
                  modifier = Modifier
                      .fillMaxWidth()
@@ -313,9 +313,10 @@ fun CyberHouseScreen(
                 UtilityTool.values().forEach { tool ->
                     val isSelected = activeUtilTool == tool
                     
-                    // FIXED CHIP STYLING: Used FilterChipDefaults correctly
+                    // FIXED: Added required parameters 'enabled', 'selected' and fixed border defaults
                     FilterChip(
                         selected = isSelected,
+                        enabled = true, // Required Param Added
                         onClick = { viewModel.setUtilTool(tool) },
                         label = { Text(tool.name, fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
@@ -325,6 +326,8 @@ fun CyberHouseScreen(
                             selectedLabelColor = accentColor
                         ),
                         border = FilterChipDefaults.filterChipBorder(
+                            enabled = true, // Required Param Added
+                            selected = isSelected, // Required Param Added
                             borderColor = borderColor,
                             selectedBorderColor = accentColor,
                             borderWidth = 0.5.dp
