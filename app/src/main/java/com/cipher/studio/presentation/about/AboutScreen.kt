@@ -154,7 +154,7 @@ fun AboutScreen(
             .onGloballyPositioned { size = it.size }
             .pointerInteropFilter { event ->
                 when (event.action) {
-                    MotionEvent.ACTION_DOWN -> isTouching = true
+                    MotionEvent.ACTION_DOWN -> isTouching = false
                     MotionEvent.ACTION_MOVE -> {
                         val x = event.x - size.width / 2
                         val y = event.y - size.height / 2
