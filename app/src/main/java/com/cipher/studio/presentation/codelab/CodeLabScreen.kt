@@ -4,24 +4,32 @@ import android.annotation.SuppressLint
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Web
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,57 +49,62 @@ fun CodeLabScreen(
     val code by viewModel.code.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
+    
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
     val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC)
     val textColor = if (isDark) Color.White else Color.Black
     val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
+    
+    // Feature 5: Fullscreen Preview Mode State
+    var isFullscreen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
             .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Mobile-friendly scrolling
     ) {
-        // --- Header ---
+        // --- Header (Minimalist) ---
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Feature 1: Animated Icon
+                Icon(Icons.Rounded.AutoAwesome, "AI", tint = Color(0xFF3B82F6), modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Code Lab",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Medium, // Reduced weight for minimalist look
                     color = textColor
                 )
-                Text(
-                    text = "Generate and preview web apps instantly.",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
             }
-            
-            // View Mode Toggles
+
+            // Minimalist View Toggles (Subtle)
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(if (isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f))
-                    .padding(4.dp)
+                    .padding(2.dp)
             ) {
                 CodeLabViewMode.values().forEach { mode ->
                     val isSelected = viewMode == mode
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(18.dp))
                             .background(if (isSelected) (if (isDark) Color.White.copy(0.1f) else Color.White) else Color.Transparent)
                             .clickable { viewModel.setViewMode(mode) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = mode.name,
+                            text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = if(isSelected) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isSelected) textColor else Color.Gray
                         )
                     }
@@ -99,78 +112,129 @@ fun CodeLabScreen(
             }
         }
 
-        // --- Input Area ---
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-            TextField(
-                value = prompt,
-                onValueChange = { viewModel.updatePrompt(it) },
-                placeholder = { Text("e.g., A calculator with a dark neon theme...", color = Color.Gray) },
+        // --- Feature 2: Smart Templates (Horizontal Scroll) ---
+        if (code.isEmpty()) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = if (isDark) Color.Black.copy(0.2f) else Color.White,
-                    unfocusedContainerColor = if (isDark) Color.Black.copy(0.2f) else Color.White,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = textColor,
-                    unfocusedTextColor = textColor
-                ),
-                singleLine = true
-            )
-            
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            Button(
-                onClick = { viewModel.handleGenerate() },
-                enabled = prompt.isNotBlank() && !isGenerating,
-                modifier = Modifier.height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (isGenerating) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.PlayArrow, "Build")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Build")
+                val templates = listOf("Login Page", "Portfolio", "Calculator", "To-Do List", "Landing Page")
+                templates.forEach { temp ->
+                    SuggestionChip(
+                        onClick = { viewModel.updatePrompt("Create a modern $temp with dark mode support") },
+                        label = { Text(temp, fontSize = 12.sp) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = if (isDark) Color(0xFF1E293B) else Color.White
+                        ),
+                        border = SuggestionChipDefaults.suggestionChipBorder(
+                            borderColor = borderColor
+                        ),
+                        shape = CircleShape
+                    )
                 }
             }
         }
 
-        // --- Main Workspace (Code & Preview) ---
-        Row(
+        // --- Minimalist Input Area (Floating Bar) ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+                .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(0.1f))
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (isDark) Color(0xFF1E293B) else Color.White)
+                .border(0.5.dp, borderColor, RoundedCornerShape(24.dp))
+                .padding(4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BasicTextField(
+                    value = prompt,
+                    onValueChange = { viewModel.updatePrompt(it) },
+                    textStyle = TextStyle(
+                        color = textColor,
+                        fontSize = 16.sp
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .heightIn(min = 24.dp),
+                    cursorBrush = SolidColor(Color(0xFF3B82F6)),
+                    decorationBox = { innerTextField ->
+                        if (prompt.isEmpty()) {
+                            Text("Describe your app concept...", color = Color.Gray.copy(0.6f), fontSize = 16.sp)
+                        }
+                        innerTextField()
+                    }
+                )
+
+                Button(
+                    onClick = { viewModel.handleGenerate() },
+                    enabled = prompt.isNotBlank() && !isGenerating,
+                    modifier = Modifier.size(48.dp),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDark) Color.White else Color.Black,
+                        contentColor = if (isDark) Color.Black else Color.White
+                    )
+                ) {
+                    if (isGenerating) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = if (isDark) Color.Black else Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
+        // --- Main Workspace (Vertical Stacking for Mobile) ---
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            
             // 1. Code Editor Section
             if (viewMode == CodeLabViewMode.CODE || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
-                        .weight(1f) // Takes 50% in Split, 100% in Code mode
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-                        .background(if (isDark) Color(0xFF1E1E1E) else Color.White)
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(0.5.dp, borderColor, RoundedCornerShape(24.dp))
+                        .background(if (isDark) Color(0xFF0F172A) else Color.White)
                 ) {
-                    // Mac-Style Header
+                    // Subtle Header with Actions
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
-                            .background(if (isDark) Color.White.copy(0.05f) else Color(0xFFF3F4F6))
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Code, "Code", tint = Color.Gray, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("index.html", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFEF4444), CircleShape))
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFEAB308), CircleShape))
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFF22C55E), CircleShape))
+                        }
+                        
+                        // Feature 3: Copy Code Action
+                        IconButton(
+                            onClick = { 
+                                clipboardManager.setText(AnnotatedString(code)) 
+                                Toast.makeText(context, "Code Copied", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Outlined.ContentCopy, "Copy", tint = Color.Gray, modifier = Modifier.size(14.dp))
                         }
                     }
+
+                    Divider(color = borderColor, thickness = 0.5.dp)
 
                     // Editor
                     Box(modifier = Modifier.padding(16.dp).weight(1f)) {
@@ -179,54 +243,50 @@ fun CodeLabScreen(
                             onValueChange = {},
                             readOnly = true,
                             textStyle = TextStyle(
-                                color = if (isDark) Color(0xFFD4D4D4) else Color(0xFF1F2937),
+                                color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF334155),
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp,
                                 lineHeight = 20.sp
                             ),
                             cursorBrush = SolidColor(textColor),
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         )
                     }
                 }
-            }
-
-            // Split Spacer
-            if (viewMode == CodeLabViewMode.SPLIT) {
-                Spacer(modifier = Modifier.width(16.dp))
             }
 
             // 2. Live Preview Section
             if (viewMode == CodeLabViewMode.PREVIEW || viewMode == CodeLabViewMode.SPLIT) {
                 Column(
                     modifier = Modifier
-                        .weight(1f) // Takes 50% in Split, 100% in Preview mode
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-                        .background(Color.White)
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(0.5.dp, borderColor, RoundedCornerShape(24.dp))
+                        .background(Color.White) // Preview always white bg
                 ) {
-                    // Browser Header
+                    // Subtle Header with Fullscreen Toggle
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
-                            .background(Color(0xFFF3F4F6))
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Web, "Preview", tint = Color.Gray, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Live Preview", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.Gray)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFF87171), CircleShape))
-                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFFACC15), CircleShape))
-                            Box(modifier = Modifier.size(10.dp).background(Color(0xFF4ADE80), CircleShape))
+                        Text("Preview", fontSize = 12.sp, color = Color.Gray.copy(0.7f), fontWeight = FontWeight.Bold)
+                        
+                        // Feature 5: Fullscreen Toggle (Mock logic)
+                        IconButton(onClick = { isFullscreen = !isFullscreen }, modifier = Modifier.size(24.dp)) {
+                            Icon(
+                                if(isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, 
+                                "Toggle", 
+                                tint = Color.Gray, 
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
+                    
+                    Divider(color = Color.Gray.copy(0.1f), thickness = 0.5.dp)
 
                     // WebView
                     if (code.isNotEmpty()) {
@@ -236,10 +296,7 @@ fun CodeLabScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Code, "Empty", tint = Color.Gray.copy(0.2f), modifier = Modifier.size(48.dp))
-                                Text("Generated app will appear here", fontSize = 12.sp, color = Color.Gray)
-                            }
+                            Text("No preview available", fontSize = 12.sp, color = Color.Gray.copy(0.4f))
                         }
                     }
                 }
