@@ -101,9 +101,15 @@ fun MarkdownRenderer(
                 is MarkdownBlock.Image -> {
                     EliteImage(url = block.url, alt = block.altText)
                 }
-                is MarkdownBlock.Quote -> {
+                                is MarkdownBlock.Quote -> {
                     // Block Quote Support (>)
-                    modifier = Modifier.heightIn(min = 24.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .heightIn(min = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .width(4.dp)
@@ -114,6 +120,7 @@ fun MarkdownRenderer(
                         StyledText(text = block.content, isDark = theme == Theme.DARK, fontSize = 16.sp, isItalic = true)
                     }
                 }
+
                 is MarkdownBlock.Rule -> {
                     // Horizontal Rule (---)
                     Divider(
