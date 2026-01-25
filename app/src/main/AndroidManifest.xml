@@ -11,15 +11,14 @@
     <application
         android:name=".CipherApplication"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Cipher Studio"
         android:supportsRtl="true"
         android:theme="@style/Theme.CipherStudio"
         tools:targetApi="31">
-        
-        <!-- 
-           ማሳሰቢያ: android:theme="@style/Theme.CipherStudio" የሚለው መስመር ነው
-           ከላይ የፈጠርነውን style በመጥራት ጥቁሩን ባር (Header) የሚያጠፋልን።
-        -->
 
         <activity
             android:name=".MainActivity"
