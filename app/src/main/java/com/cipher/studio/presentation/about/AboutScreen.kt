@@ -84,6 +84,12 @@ fun AboutScreen(
     // 3D & Gyro Logic
     var rotateX by remember { mutableStateOf(0f) }
     var rotateY by remember { mutableStateOf(0f) }
+    
+    // -- 1. SMOOTH ROTATION FIX --
+    // These animated values make the card tilt smoothly instead of jerking
+    val animatedRotateX by animateFloatAsState(targetValue = rotateX, animationSpec = tween(100))
+    val animatedRotateY by animateFloatAsState(targetValue = rotateY, animationSpec = tween(100))
+
     var size by remember { mutableStateOf(IntSize.Zero) }
     var isTouching by remember { mutableStateOf(false) }
 
@@ -171,8 +177,9 @@ fun AboutScreen(
                 .fillMaxWidth(0.9f)
                 .aspectRatio(0.75f) // Taller card for better layout
                 .graphicsLayer {
-                    rotationX = rotateX
-                    rotationY = rotateY
+                    // -- SMOOTH ROTATION APPLIED HERE --
+                    rotationX = animatedRotateX
+                    rotationY = animatedRotateY
                     cameraDistance = 16f * density // Improved depth
                     translationX = glitchOffsetX
                 }
@@ -326,14 +333,19 @@ fun AboutScreen(
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Clean Line Icons
-                    ModernSocialLink(Icons.Outlined.Close, "https://x.com/Cipher_attacks", accentColor) // X Logo proxy
-                    ModernSocialLink(Icons.Outlined.PlayCircle, "https://www.youtube.com/@cipher-attack", Color(0xFFEF4444)) // YT
-                    ModernSocialLink(Icons.Outlined.DataObject, "https://github.com/cipher-attack", Color.White) // GitHub
-                    ModernSocialLink(Icons.Outlined.BusinessCenter, "https://et.linkedin.com/in/cipher-attack-93582433b", Color(0xFF0A66C2)) // LinkedIn
+                    // -- 3. SOCIAL ICONS FIX --
+                    // Using 'Close' for X (Cross), 'PlayCircle' for YT, 'Code' for GitHub, 'BusinessCenter' for LinkedIn
+                    ModernSocialLink(Icons.Outlined.Close, "https://x.com/Cipher_attacks", accentColor) 
+                    ModernSocialLink(Icons.Outlined.PlayCircle, "https://www.youtube.com/@cipher-atack", Color(0xFFEF4444)) 
+                    ModernSocialLink(Icons.Outlined.Code, "https://github.com/cipher-attack", Color.White) // Fixed: Changed DataObject to Code
+                    ModernSocialLink(Icons.Outlined.BusinessCenter, "https://et.linkedin.com/in/cipher-attack-93582433b", Color(0xFF0A66C2)) 
                 }
             }
         }
+
+        // -- 2. SCANLINE ACTIVATION --
+        // Added at the very end of the main Box to overlay everything
+        ScanLine(accentColor.copy(alpha = 0.2f))
     }
 }
 
@@ -365,7 +377,6 @@ fun ModernSocialLink(icon: ImageVector, url: String, color: Color) {
                 }
                 
                 // Reset animation shortly after
-                // We don't wait for delay to open intent anymore!
             },
         contentAlignment = Alignment.Center
     ) {
@@ -385,7 +396,7 @@ fun ModernSocialLink(icon: ImageVector, url: String, color: Color) {
     }
 }
 
-// Feature 3: Nano Particles inside the card
+// Feature 3: Nano Particles inside card
 @Composable
 fun NanoParticles(color: Color) {
     val particles = remember { List(15) { Particle() } }
@@ -437,7 +448,9 @@ fun HexagonGridOverlay(color: Color) {
 // Existing Warp Speed (Optimized)
 @Composable
 fun WarpSpeedBackground(isRedMode: Boolean = false) {
-    val stars = remember { List(150) { Star(
+    // -- 4. PERFORMANCE FIX --
+    // Reduced star count from 150 to 80 for better FPS on older devices
+    val stars = remember { List(80) { Star(
         x = (Math.random() * 2 - 1).toFloat(),
         y = (Math.random() * 2 - 1).toFloat(),
         z = Math.random().toFloat()
