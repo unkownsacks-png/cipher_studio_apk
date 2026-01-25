@@ -122,7 +122,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var isControlsOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    
+
     // Feature: Real Delete Confirmation State
     var sessionToDelete by remember { mutableStateOf<String?>(null) }
 
@@ -138,7 +138,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(320.dp)
+                modifier = Modifier.width(320.dp).windowInsetsPadding(WindowInsets.safeDrawing)
             ) {
                 InternalSidebar(
                     sessions = sessions,
@@ -169,6 +169,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     ) {
         Scaffold(
+            modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = MaterialTheme.colorScheme.background
         ) { paddingValues ->
@@ -177,6 +178,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
@@ -389,7 +391,7 @@ fun GreetingHeader() {
             contentDescription = null,
             modifier = Modifier.size(40.dp).padding(bottom = 16.dp)
         )
-        
+
         Text(
             text = "$greeting, Creator",
             style = MaterialTheme.typography.headlineLarge,
@@ -559,12 +561,12 @@ fun InternalSidebar(
 
         // Chat
         SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
-        
+
         // Dev Tools
         SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
         SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
         SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
-        
+
         // Missing Apps Added Here
         SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
         SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
@@ -605,11 +607,11 @@ fun InternalSidebar(
                 }
             }
         }
-        
+
         Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        
+
         // 5. Footer (About & Settings)
-        
+
         // ABOUT LINK (Added as requested)
         Row(modifier = Modifier.clickable { onViewChange(ViewMode.ABOUT) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
