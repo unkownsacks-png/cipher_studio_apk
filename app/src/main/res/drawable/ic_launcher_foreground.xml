@@ -1,0 +1,59 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    
+    <!-- 
+       ማሳሰቢያ፡ ይህ የ Cipher Studio ዋና አርማ ነው። 
+       ባክግራውንድ የለውም (Transparent)። 
+       ከላይ የሰጠኸኝን Group Scale እና Path Data እንዳለ ተጠቅሜዋለሁ።
+    -->
+    
+    <group 
+        android:translateX="212" 
+        android:translateY="212" 
+        android:scaleX="6" 
+        android:scaleY="6">
+        
+        <!-- 1. የውጪው የቤቱ/የታጉ ቅርፅ -->
+        <path 
+            android:pathData="M 75 25 L 35 25 L 15 50 L 35 75 L 75 75" 
+            android:strokeWidth="8" 
+            android:strokeColor="#FFFFFF" 
+            android:strokeLineCap="round" 
+            android:strokeLineJoin="round"/>
+            
+        <!-- 2. የ AI ጭንቅላት (ክቡ) -->
+        <path 
+            android:pathData="M 30,50 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0" 
+            android:strokeWidth="8" 
+            android:strokeColor="#FFFFFF"/>
+            
+        <!-- 3. የ AI አይን (Eye/Node) -->
+        <path 
+            android:pathData="M 40,50 m -3,0 a 3,3 0 1,1 6,0 a 3,3 0 1,1 -6,0" 
+            android:fillColor="#FFFFFF"/>
+            
+        <!-- 4. ግንዱ (Connection Line) -->
+        <path 
+            android:pathData="M 50 50 L 85 50" 
+            android:strokeWidth="8" 
+            android:strokeColor="#FFFFFF" 
+            android:strokeLineCap="round"/>
+            
+        <!-- 5. ዳታዎቹ (The Data Lines/Teeth) -->
+        <path 
+            android:pathData="M 65 50 L 65 62" 
+            android:strokeWidth="8" 
+            android:strokeColor="#FFFFFF" 
+            android:strokeLineCap="round"/>
+            
+        <path 
+            android:pathData="M 78 50 L 78 58" 
+            android:strokeWidth="8" 
+            android:strokeColor="#FFFFFF" 
+            android:strokeLineCap="round"/>
+            
+    </group>
+</vector>
