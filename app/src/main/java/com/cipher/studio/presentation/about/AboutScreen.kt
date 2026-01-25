@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInteropFilter
-import androidx.compose.material3.Divider
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -49,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex // IMPORT ADDED
 import com.cipher.studio.domain.model.Theme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -153,7 +153,7 @@ fun AboutScreen(
             .onGloballyPositioned { size = it.size }
             .pointerInteropFilter { event ->
                 when (event.action) {
-                    MotionEvent.ACTION_DOWN -> isTouching = false
+                    MotionEvent.ACTION_DOWN -> isTouching = true // FIXED: Must be true to pause sensors
                     MotionEvent.ACTION_MOVE -> {
                         val x = event.x - size.width / 2
                         val y = event.y - size.height / 2
@@ -164,7 +164,7 @@ fun AboutScreen(
                         isTouching = false
                     }
                 }
-                true
+                false // FIXED: Return false so events pass through to children (buttons)
             }
     ) {
         // Feature 4: Hexagon Grid + Stars
@@ -243,7 +243,7 @@ fun AboutScreen(
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         drawCircle(
                             brush = Brush.sweepGradient(listOf(Color.Transparent, accentColor, Color.Transparent)),
-                            radius = this.size.minDimension / 2,
+                            radius = size.minDimension / 2,
                             style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f)))
                         )
                     }
@@ -332,13 +332,14 @@ fun AboutScreen(
                 // --- SOCIALS SECTION (FIXED & MODERN) ---
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.zIndex(1f) // FIXED: Ensures icons are on top of other layers
                 ) {
                     // -- 3. SOCIAL ICONS FIX --
                     // Using 'Close' for X (Cross), 'PlayCircle' for YT, 'Code' for GitHub, 'BusinessCenter' for LinkedIn
                     ModernSocialLink(Icons.Outlined.Close, "https://x.com/Cipher_attacks", accentColor) 
-                    ModernSocialLink(Icons.Outlined.PlayCircle, "https://www.youtube.com/@cipher-atack", Color(0xFFEF4444)) 
-                    ModernSocialLink(Icons.Outlined.Code, "https://github.com/cipher-attack", Color.White) // Fixed: Changed DataObject to Code
+                    ModernSocialLink(Icons.Outlined.PlayCircle, "https://www.youtube.com/@cipher-attack", Color(0xFFEF4444)) 
+                    ModernSocialLink(Icons.Outlined.Code, "https://github.com/cipher-attack", Color.White) 
                     ModernSocialLink(Icons.Outlined.BusinessCenter, "https://et.linkedin.com/in/cipher-attack-93582433b", Color(0xFF0A66C2)) 
                 }
             }
