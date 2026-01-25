@@ -242,7 +242,7 @@ fun AboutScreen(
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         drawCircle(
                             brush = Brush.sweepGradient(listOf(Color.Transparent, accentColor, Color.Transparent)),
-                            radius = size.minDimension / 2,
+                            radius = this.size.minDimension / 2,
                             style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f)))
                         )
                     }
