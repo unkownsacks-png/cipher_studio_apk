@@ -51,7 +51,7 @@ import com.cipher.studio.domain.model.Theme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Random
+import kotlin.random.Random // FIX: Changed from java.util.Random to kotlin.random.Random
 import kotlin.math.abs
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -121,10 +121,10 @@ fun AboutScreen(
     var glitchColorOffset by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         while (isActive) {
-            delay(Random().nextLong(3000, 8000)) // Random interval
+            delay(Random.nextLong(3000, 8000)) // FIX: Removed parenthesis ()
             // Trigger Glitch
             repeat(5) {
-                glitchOffsetX = Random().nextInt(-15, 15).toFloat()
+                glitchOffsetX = Random.nextInt(-15, 15).toFloat() // FIX: Removed parenthesis ()
                 glitchColorOffset = true
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) // Haptic on glitch
                 delay(50)
@@ -262,7 +262,7 @@ fun AboutScreen(
                     val target = if(isRedMode) "ROOT ACCESS" else "CIPHER ATTACK" // Dynamic Text
                     val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()"
                     for (i in 0..15) {
-                        scrambledText = target.map { if (Random().nextBoolean()) it else chars.random() }.joinToString("")
+                        scrambledText = target.map { if (Random.nextBoolean()) it else chars.random() }.joinToString("") // FIX: Removed parenthesis
                         if (i % 2 == 0) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) // Haptic on scramble
                         delay(50)
                     }
@@ -311,7 +311,7 @@ fun AboutScreen(
                 // FEATURE 3: Typewriter Effect
                 val fullDescription = "Red Teaming the Metaverse.\nCyber Security Specialist & Creative Web Designer."
                 var typeWriterText by remember { mutableStateOf("") }
-                
+
                 LaunchedEffect(fullDescription) {
                     typeWriterText = ""
                     fullDescription.forEach { char ->
