@@ -10,12 +10,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,102 +31,93 @@ fun CyberHouseScreen(
     viewModel: CyberHouseViewModel = hiltViewModel()
 ) {
     val isDark = theme == Theme.DARK
-    
+
     val mode by viewModel.mode.collectAsState()
     val activeAiTool by viewModel.activeAiTool.collectAsState()
     val aiInputData by viewModel.aiInputData.collectAsState()
     val aiOutput by viewModel.aiOutput.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
-    
+
     val activeUtilTool by viewModel.activeUtilTool.collectAsState()
     val utilInput by viewModel.utilInput.collectAsState()
     val utilOutput by viewModel.utilOutput.collectAsState()
 
-    // Hacker Theme Colors
-    val bgColor = if (isDark) Color(0xFF050505) else Color(0xFFF9FAFB)
-    val textColor = if (isDark) Color(0xFF22C55E) else Color(0xFF111827) // Green for hacker feel
-    val borderColor = if (isDark) Color(0xFF22C55E).copy(0.3f) else Color.Gray.copy(0.3f)
-    val panelBg = if (isDark) Color.Black else Color.White
+    // Minimalist Palette (Gemini Inspired)
+    val bgColor = if (isDark) Color(0xFF020617) else Color(0xFFF8FAFC)
+    val textColor = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1E293B)
+    val accentColor = if (isDark) Color(0xFF10B981) else Color(0xFF059669) // Soft Emerald
+    val borderColor = if (isDark) Color.White.copy(0.08f) else Color.Black.copy(0.08f)
+    val cardBg = if (isDark) Color(0xFF0F172A) else Color.White
+    val inputBg = if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
             .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Mobile scroll enabled
     ) {
-        // --- Header ---
+        // --- Header (Elegant & Minimal) ---
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Security, "Shield", tint = if (isDark) Color(0xFF22C55E) else Color.Black)
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Outlined.Security, "Shield", tint = accentColor, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "CYBER HOUSE",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        fontFamily = FontFamily.Monospace,
+                        text = "Cyber House",
+                        fontWeight = FontWeight.Medium, // Reduced weight
+                        fontSize = 22.sp,
                         color = textColor,
-                        letterSpacing = 2.sp
+                        letterSpacing = 0.5.sp
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    // Root Access Badge
+                    // Minimal Badge
                     Text(
-                        text = "ROOT ACCESS",
+                        text = "ROOT",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = accentColor,
                         modifier = Modifier
-                            .background(Color(0xFFDC2626), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .border(0.5.dp, accentColor.copy(0.5f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
                 Text(
-                    text = "Advanced Security Operations & Red Teaming Console.",
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    fontFamily = FontFamily.Monospace
+                    text = "Advanced Red Teaming Console",
+                    fontSize = 13.sp,
+                    color = Color.Gray.copy(0.8f),
+                    modifier = Modifier.padding(start = 36.dp, top = 4.dp)
                 )
             }
 
-            // Mode Switcher
+            // Subtle Mode Switcher
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-                    .background(if (isDark) Color.Black.copy(0.4f) else Color.Gray.copy(0.1f))
-                    .padding(4.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isDark) Color.White.copy(0.05f) else Color.Black.copy(0.05f))
+                    .padding(2.dp)
             ) {
                 ToolMode.values().forEach { m ->
                     val isSelected = mode == m
-                    val bg = if (isSelected) (if (isDark) Color(0xFF22C55E).copy(0.2f) else Color.White) else Color.Transparent
-                    val textCol = if (isSelected) (if (isDark) Color(0xFF4ADE80) else Color.Black) else Color.Gray
-                    
+                    val textCol = if (isSelected) textColor else Color.Gray
+
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(bg)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (isSelected) cardBg else Color.Transparent)
                             .clickable { viewModel.setMode(m) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (m == ToolMode.AI) Icons.Default.Memory else Icons.Default.Terminal, 
-                                contentDescription = null,
-                                tint = textCol,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (m == ToolMode.AI) "AI OPS" else "UTILS (JS)",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = textCol
-                            )
-                        }
+                        Text(
+                            text = if (m == ToolMode.AI) "AI Ops" else "Utils",
+                            fontSize = 12.sp,
+                            fontWeight = if(isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = textCol
+                        )
                     }
                 }
             }
@@ -132,144 +125,169 @@ fun CyberHouseScreen(
 
         // --- AI MODE ---
         if (mode == ToolMode.AI) {
-            Row(modifier = Modifier.weight(1f)) {
-                // LEFT: Input & Tools
-                Column(modifier = Modifier.weight(0.35f).fillMaxHeight()) {
-                    // Tool Selection
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AiTool.values().forEach { tool ->
-                            val isSelected = activeAiTool == tool
-                            val bg = if (isSelected) (if (isDark) Color(0xFF22C55E).copy(0.1f) else Color.Black) else Color.Transparent
-                            val border = if (isSelected) (if (isDark) Color(0xFF22C55E) else Color.Black) else borderColor
-                            val textC = if (isSelected) (if (isDark) Color(0xFF4ADE80) else Color.White) else Color.Gray
-                            
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .border(1.dp, border, RoundedCornerShape(4.dp))
-                                    .background(bg, RoundedCornerShape(4.dp))
-                                    .clickable { viewModel.setAiTool(tool) }
-                                    .padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = when(tool) {
-                                            AiTool.PAYLOAD -> Icons.Default.Terminal
-                                            AiTool.AUDIT -> Icons.Default.BugReport
-                                            AiTool.LOGS -> Icons.Default.Search
-                                        },
-                                        contentDescription = null,
-                                        tint = if (isSelected) textC else Color.Gray,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = tool.name,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) textC else Color.Gray,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Input Box
+            // 1. Tool Cards (Row)
+            Row(
+                modifier = Modifier.fillMaxWidth(), 
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AiTool.values().forEach { tool ->
+                    val isSelected = activeAiTool == tool
+                    val bg = if (isSelected) accentColor.copy(0.1f) else cardBg
+                    val borderCol = if (isSelected) accentColor else borderColor
+                    
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-                            .background(panelBg)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(bg)
+                            .border(0.5.dp, borderCol, RoundedCornerShape(16.dp))
+                            .clickable { viewModel.setAiTool(tool) }
+                            .padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "TARGET INPUT",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDark) Color(0xFF22C55E) else Color.Gray,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isDark) Color(0xFF22C55E).copy(0.05f) else Color.Gray.copy(0.1f))
-                                .padding(8.dp)
-                        )
-                        
-                        TextField(
-                            value = aiInputData,
-                            onValueChange = { viewModel.updateAiInput(it) },
-                            placeholder = { 
-                                Text(
-                                    text = when(activeAiTool) {
-                                        AiTool.PAYLOAD -> "e.g., SQL Injection for Login Page..."
-                                        AiTool.AUDIT -> "// Paste vulnerable code..."
-                                        AiTool.LOGS -> "Paste server logs..."
-                                    },
-                                    color = Color.Gray,
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace
-                                ) 
+                        Icon(
+                            imageVector = when(tool) {
+                                AiTool.PAYLOAD -> Icons.Outlined.Code
+                                AiTool.AUDIT -> Icons.Outlined.BugReport
+                                AiTool.LOGS -> Icons.Outlined.Search
                             },
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = textColor,
-                                unfocusedTextColor = textColor
-                            ),
-                            textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            contentDescription = null,
+                            tint = if (isSelected) accentColor else Color.Gray,
+                            modifier = Modifier.size(20.dp)
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = tool.name,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isSelected) accentColor else Color.Gray
+                        )
+                    }
+                }
+            }
 
-                        Button(
-                            onClick = { viewModel.runAiTool() },
-                            enabled = aiInputData.isNotEmpty() && !isProcessing,
-                            shape = RoundedCornerShape(0.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) Color(0xFF16A34A) else Color.Black,
-                                contentColor = if (isDark) Color.Black else Color.White
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            if (isProcessing) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White)
-                            } else {
-                                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("EXECUTE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 2. Input Area (Gemini Style)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardBg)
+                    .border(0.5.dp, borderColor, RoundedCornerShape(20.dp))
+                    .padding(4.dp)
+            ) {
+                // Header inside card
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Input, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Target Parameter", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
+                }
+
+                TextField(
+                    value = aiInputData,
+                    onValueChange = { viewModel.updateAiInput(it) },
+                    placeholder = { 
+                        Text(
+                            text = when(activeAiTool) {
+                                AiTool.PAYLOAD -> "e.g., SQL Injection pattern for login..."
+                                AiTool.AUDIT -> "Paste vulnerable code block..."
+                                AiTool.LOGS -> "Paste server logs here..."
+                            },
+                            color = Color.Gray.copy(0.6f),
+                            fontSize = 13.sp
+                        ) 
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(inputBg), // Soft background for input
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        cursorColor = accentColor,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Execute Button (Floating Right)
+                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.CenterEnd) {
+                    Button(
+                        onClick = { viewModel.runAiTool() },
+                        enabled = aiInputData.isNotEmpty() && !isProcessing,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Execute", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(Icons.Rounded.ArrowForward, null, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                // RIGHT: Output Console
-                Column(
+            // 3. Output Console
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp) // Fixed height for mobile scroll
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(0.5.dp, borderColor, RoundedCornerShape(20.dp))
+                    .background(if (isDark) Color(0xFF050505) else Color.White)
+            ) {
+                // Console Header
+                Row(
                     modifier = Modifier
-                        .weight(0.65f)
-                        .fillMaxHeight()
-                        .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-                        .background(if (isDark) Color(0xFF050505) else Color.White)
+                        .fillMaxWidth()
+                        .background(if (isDark) Color.White.copy(0.03f) else Color.Black.copy(0.03f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.weight(1f).padding(16.dp)) {
+                    Icon(Icons.Default.Terminal, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("SYSTEM OUTPUT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
+                }
+                
+                Divider(color = borderColor, thickness = 0.5.dp)
+
+                Box(modifier = Modifier.weight(1f).padding(16.dp)) {
+                    if (aiOutput.isNotEmpty()) {
                         val scrollState = rememberScrollState()
-                        if (aiOutput.isNotEmpty()) {
-                            Text(
-                                text = aiOutput,
-                                color = textColor,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                                modifier = Modifier.verticalScroll(scrollState)
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier.align(Alignment.Center),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(Icons.Default.Security, null, tint = Color.Gray.copy(0.3f), modifier = Modifier.size(64.dp))
-                                Text("SYSTEM READY", fontSize = 12.sp, color = Color.Gray, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
-                                Text("AWAITING TARGET", fontSize = 10.sp, color = Color.Gray.copy(0.5f), fontFamily = FontFamily.Monospace)
-                            }
+                        Text(
+                            text = aiOutput,
+                            color = if(isDark) Color(0xFF4ADE80) else Color(0xFF047857), // Matrix Green for text only
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.verticalScroll(scrollState)
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Outlined.Security, null, tint = Color.Gray.copy(0.2f), modifier = Modifier.size(56.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Ready for Operations", fontSize = 13.sp, color = Color.Gray.copy(0.6f))
                         }
                     }
                 }
@@ -278,67 +296,70 @@ fun CyberHouseScreen(
 
         // --- UTILITY MODE ---
         if (mode == ToolMode.UTILITY) {
-            // (Layout similar to AI mode but for Utils - kept simple for brevity as structure is same)
-            Column(modifier = Modifier.weight(1f)) {
-                // ... Utility Buttons and Input/Output Split ...
-                // Reusing structure for consistent look
-                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    UtilityTool.values().forEach { tool ->
-                        val isSelected = activeUtilTool == tool
-                        Button(
-                            onClick = { viewModel.setUtilTool(tool) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) (if (isDark) Color(0xFF22C55E).copy(0.2f) else Color.Black) else Color.Transparent
-                            ),
-                            border = if (isSelected) BorderStroke(1.dp, if (isDark) Color(0xFF22C55E) else Color.Black) else BorderStroke(1.dp, borderColor),
-                            shape = RoundedCornerShape(4.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = tool.name, 
-                                fontSize = 12.sp, 
-                                color = if (isSelected) (if (isDark) Color(0xFF4ADE80) else Color.White) else Color.Gray
-                            )
-                        }
-                    }
-                }
-
-                Row(modifier = Modifier.weight(1f)) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-                            .background(panelBg)
-                    ) {
-                        Text("INPUT STRING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                        TextField(
-                            value = utilInput,
-                            onValueChange = { viewModel.updateUtilInput(it) },
-                            placeholder = { Text("Type here...", fontFamily = FontFamily.Monospace, fontSize = 12.sp) },
-                            modifier = Modifier.fillMaxSize(),
-                            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
-                            textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
-                            .background(if (isDark) Color(0xFF050505) else Color(0xFFF9FAFB))
-                    ) {
-                        Text("PROCESSED OUTPUT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                        TextField(
-                            value = utilOutput,
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.fillMaxSize(),
-                            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
-                            textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace)
-                        )
-                    }
+            // 1. Utility Chips (FlowRow alternative using Scrollable Row)
+             Row(
+                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 24.dp), 
+                 horizontalArrangement = Arrangement.spacedBy(8.dp)
+             ) {
+                UtilityTool.values().forEach { tool ->
+                    val isSelected = activeUtilTool == tool
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setUtilTool(tool) },
+                        label = { Text(tool.name, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accentColor.copy(0.1f),
+                            selectedLabelColor = accentColor,
+                            selectedBorderColor = accentColor
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(borderColor = borderColor)
+                    )
                 }
             }
+
+            // 2. Input
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardBg)
+                    .border(0.5.dp, borderColor, RoundedCornerShape(20.dp))
+            ) {
+                Text("INPUT STRING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(16.dp))
+                TextField(
+                    value = utilInput,
+                    onValueChange = { viewModel.updateUtilInput(it) },
+                    placeholder = { Text("Type here...", fontFamily = FontFamily.Monospace, fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxSize().background(Color.Transparent),
+                    colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 3. Output
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isDark) Color(0xFF050505) else Color(0xFFF1F5F9))
+                    .border(0.5.dp, borderColor, RoundedCornerShape(20.dp))
+            ) {
+                Text("PROCESSED RESULT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(16.dp))
+                TextField(
+                    value = utilOutput,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier.fillMaxSize(),
+                    colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedTextColor = textColor, unfocusedTextColor = textColor),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                )
+            }
         }
+        
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
