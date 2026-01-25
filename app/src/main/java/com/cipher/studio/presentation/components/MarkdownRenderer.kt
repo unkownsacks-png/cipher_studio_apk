@@ -103,7 +103,7 @@ fun MarkdownRenderer(
                 }
                 is MarkdownBlock.Quote -> {
                     // Block Quote Support (>)
-                    Row(modifier = Modifier.height(androidx.compose.ui.layout.IntrinsicSize.Min)) {
+                    modifier = Modifier.heightIn(min = 24.dp)) {
                         Box(
                             modifier = Modifier
                                 .width(4.dp)
