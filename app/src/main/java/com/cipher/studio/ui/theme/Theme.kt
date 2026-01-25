@@ -69,6 +69,9 @@ fun CipherAppTheme(
         SideEffect {
             val window = (view.context as Activity).window
             
+            // EDGE-TO-EDGE ACTIVATION
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
             // Set both Status Bar and Nav Bar to the Background Color
             window.statusBarColor = colorScheme.background.toArgb()
             window.navigationBarColor = colorScheme.background.toArgb()
