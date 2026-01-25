@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.IntrinsicSize // IMPORT ADDED
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -289,7 +290,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             if (nextTrim.startsWith("```") || nextTrim.startsWith("|") || nextTrim.startsWith("#") || 
                 nextTrim.startsWith(">") || nextTrim == "---" || nextTrim == "***" || 
                 nextTrim.startsWith("- [") || nextTrim.startsWith("* ") || nextTrim.startsWith("- ") || nextTrim.matches(Regex("^\\d+\\..*"))) break
-            
+
             textBuilder.append(lines[i]).append("\n")
             i++
         }
@@ -399,7 +400,7 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         stringRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
         }
-        
+
         // 2. Keywords (Orange/Purple)
         keywordsRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
@@ -414,7 +415,7 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
         commentRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
         }
-        
+
         // Base Color
         addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, str.length)
     }
@@ -463,7 +464,7 @@ fun StyledText(
 ) {
     val uriHandler = LocalUriHandler.current
     val color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F)
-    val lineHeight = 26.sp
+    val lineHeight = 32.sp // AMHARIC OPTIMIZATION: Increased to prevent cut-off
 
     val annotatedString = buildAnnotatedString {
         // Recursively apply styles: Link -> Strikethrough -> Code -> Bold -> Italic
@@ -528,7 +529,7 @@ fun StyledText(
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
     // Regex matches: `code`, **bold**, *italic*, or ~~strikethrough~~
     val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
-    
+
     var lastIndex = 0
 
     pattern.findAll(rawText).forEach { match ->
@@ -572,7 +573,7 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
         }
         lastIndex = match.range.last + 1
     }
-    
+
     // Remaining text after the last match
     append(rawText.substring(lastIndex))
 }
