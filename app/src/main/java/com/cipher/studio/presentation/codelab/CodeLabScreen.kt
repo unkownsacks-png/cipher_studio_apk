@@ -130,9 +130,7 @@ fun CodeLabScreen(
                         colors = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = if (isDark) Color(0xFF1E293B) else Color.White
                         ),
-                        border = SuggestionChipDefaults.suggestionChipBorder(
-                            borderColor = borderColor
-                        ),
+                        border = BorderStroke(1.dp, borderColor),
                         shape = CircleShape
                     )
                 }
