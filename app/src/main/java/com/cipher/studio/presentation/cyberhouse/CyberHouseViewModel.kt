@@ -2,6 +2,7 @@ package com.cipher.studio.presentation.cyberhouse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cipher.studio.data.local.ApiKeyManager // IMPORT ADDED
 import com.cipher.studio.domain.model.ModelConfig
 import com.cipher.studio.domain.model.ModelName
 import com.cipher.studio.domain.service.GenerativeAIService
@@ -30,7 +31,8 @@ enum class UtilityTool {
 
 @HiltViewModel
 class CyberHouseViewModel @Inject constructor(
-    private val aiService: GenerativeAIService
+    private val aiService: GenerativeAIService,
+    private val apiKeyManager: ApiKeyManager // FIX 1: Inject ApiKeyManager
 ) : ViewModel() {
 
     // --- State Management ---
@@ -143,11 +145,18 @@ class CyberHouseViewModel @Inject constructor(
                 systemInstruction = systemPrompt
             )
 
-            // API Key Placeholder
-            val apiKey = "YOUR_API_KEY_HERE"
+            // FIX 2: Retrieve actual API Key from Manager
+            val apiKey = apiKeyManager.getApiKey()
+
+            // FIX 3: Validate Key
+            if (apiKey.isNullOrBlank()) {
+                _aiOutput.value = "ACCESS DENIED: API Key not found. Please add it in Settings."
+                _isProcessing.value = false
+                return@launch
+            }
 
             aiService.generateContentStream(
-                apiKey = apiKey,
+                apiKey = apiKey, // FIX 4: Pass real key
                 prompt = userPrompt,
                 attachments = emptyList(),
                 history = emptyList(),
