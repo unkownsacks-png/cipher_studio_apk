@@ -1,6 +1,5 @@
 package com.cipher.studio.presentation.visionhub
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.speech.tts.TextToSpeech
@@ -27,7 +26,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SpanStyle
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,7 +34,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.SpanStyle // FIX: Added Import
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -111,7 +109,7 @@ fun VisionHubScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(320.dp) // Taller for better view
+                .height(320.dp)
                 .shadow(8.dp, RoundedCornerShape(20.dp), spotColor = accentColor.copy(alpha = 0.1f))
                 .clip(RoundedCornerShape(20.dp))
                 .background(if (isDark) Color.Black else Color(0xFFE2E8F0))
@@ -137,7 +135,6 @@ fun VisionHubScreen(
                                 if (scale == 1f) offset = Offset.Zero
                                 else {
                                     val newOffset = offset + pan
-                                    // Simple bound check could be added here
                                     offset = newOffset
                                 }
                             }
