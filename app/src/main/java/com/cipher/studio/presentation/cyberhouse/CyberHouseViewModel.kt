@@ -140,7 +140,7 @@ class CyberHouseViewModel @Inject constructor(
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.PRO,
+                model = ModelName.FLASH,
                 temperature = 0.4, // Lower temp for precision
                 systemInstruction = systemPrompt
             )
