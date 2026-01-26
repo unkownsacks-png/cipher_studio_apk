@@ -99,44 +99,53 @@ class MainViewModel @Inject constructor(
             if (status != TextToSpeech.ERROR) tts?.language = Locale.US
         }
 
-        // Init Speech Recognition
+        // Init Speech Recognition (SAFE MODE)
         initSpeechRecognizer()
     }
 
     // --- VOICE INPUT LOGIC (REAL IMPLEMENTATION) ---
     private fun initSpeechRecognizer() {
-        if (SpeechRecognizer.isRecognitionAvailable(application)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(application)
-            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() { _isVoiceActive.value = true }
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { _isVoiceActive.value = false }
-                
-                override fun onError(error: Int) {
-                    _isVoiceActive.value = false
-                    // Optional: Handle specific error codes here
-                }
+        try {
+            if (SpeechRecognizer.isRecognitionAvailable(application)) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(application)
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() { _isVoiceActive.value = true }
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() { _isVoiceActive.value = false }
 
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val spokenText = matches[0]
-                        // Append to existing text smartly
-                        val currentText = _prompt.value
-                        _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
+                    override fun onError(error: Int) {
+                        _isVoiceActive.value = false
+                        // Optional: Handle specific error codes here
                     }
-                    _isVoiceActive.value = false
-                }
 
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            val spokenText = matches[0]
+                            // Append to existing text smartly
+                            val currentText = _prompt.value
+                            _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
+                        }
+                        _isVoiceActive.value = false
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fail silently, don't crash app
         }
     }
 
     fun toggleVoiceInput() {
+        if (speechRecognizer == null) {
+            initSpeechRecognizer() // Try again if failed first time
+        }
+
         if (_isVoiceActive.value) {
             speechRecognizer?.stopListening()
             _isVoiceActive.value = false
