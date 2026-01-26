@@ -140,7 +140,7 @@ class VisionHubViewModel @Inject constructor(
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.PRO, // Always use Pro for vision tasks
+                model = ModelName.FLASH, // Always use Pro for vision tasks
                 temperature = 0.4,
                 systemInstruction = systemInfo
             )
