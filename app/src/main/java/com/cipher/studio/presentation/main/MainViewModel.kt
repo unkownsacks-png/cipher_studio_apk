@@ -191,11 +191,11 @@ class MainViewModel @Inject constructor(
         _config.value = newConfig
         
         // Update Badge Name based on model selection
-        val name = newConfig.modelName.lowercase()
+        val name = newConfig.model.name.lowercase() 
+        
         _currentModelName.value = when {
-            name.contains("gemini-pro") -> "Gemini Pro"
-            name.contains("gemini-1.5") -> "Gemini 1.5 Flash"
-            name.contains("gpt") -> "GPT Model"
+            name.contains("pro") -> "Gemini Pro"
+            name.contains("flash") -> "Gemini 1.5 Flash"
             else -> "Cipher Ultra"
         }
         
