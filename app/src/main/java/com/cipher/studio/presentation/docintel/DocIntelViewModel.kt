@@ -2,6 +2,7 @@ package com.cipher.studio.presentation.docintel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cipher.studio.data.local.ApiKeyManager // IMPORT ADDED
 import com.cipher.studio.domain.model.ModelConfig
 import com.cipher.studio.domain.model.ModelName
 import com.cipher.studio.domain.service.GenerativeAIService
@@ -18,7 +19,8 @@ enum class DocAnalysisMode {
 
 @HiltViewModel
 class DocIntelViewModel @Inject constructor(
-    private val aiService: GenerativeAIService
+    private val aiService: GenerativeAIService,
+    private val apiKeyManager: ApiKeyManager // FIX 1: Dependency Injection
 ) : ViewModel() {
 
     // State
@@ -41,26 +43,45 @@ class DocIntelViewModel @Inject constructor(
         _isProcessing.value = true
         _analysis.value = ""
 
+        // FIX 2: Retrieve API Key
+        val apiKey = apiKeyManager.getApiKey()
+
+        // FIX 3: Validate Key
+        if (apiKey.isNullOrBlank()) {
+            _analysis.value = "## ⚠️ ACCESS DENIED\n\nAPI Key not found. Please navigate to Settings and configure your Gemini API Key to unlock Document Intelligence."
+            _isProcessing.value = false
+            return
+        }
+
         var prompt = ""
         when (mode) {
-            DocAnalysisMode.SUMMARY -> prompt = "Provide a comprehensive executive summary of this document. Bullet points for key takeaways."
-            DocAnalysisMode.AUDIT -> prompt = "Audit this text. Find potential risks, contradictions, legal loopholes, or weak arguments."
-            DocAnalysisMode.INSIGHTS -> prompt = "Extract hidden insights, patterns, and actionable intelligence from this text that might not be immediately obvious."
+            DocAnalysisMode.SUMMARY -> prompt = "Provide a comprehensive executive summary. Use headers, bullet points for key takeaways, and a final 'Actionable Verdict'."
+            DocAnalysisMode.AUDIT -> prompt = "Perform a Forensic Audit on this text. Highlight:\n1. Potential Risks\n2. Legal Loopholes\n3. Contradictions\n4. Ambiguous Language."
+            DocAnalysisMode.INSIGHTS -> prompt = "Extract hidden insights, patterns, and actionable intelligence. Identify key entities, sentiment, and implied intent that is not immediately obvious."
         }
 
         // Include the text in the prompt context
-        val fullPrompt = "$prompt\n\nDOCUMENT:\n${_docText.value}"
+        val fullPrompt = "$prompt\n\n--- TARGET DOCUMENT ---\n${_docText.value}"
+
+        // ENHANCED REAL-WORLD SYSTEM INSTRUCTION
+        val systemInstruction = """
+            You are a Senior Document Analyst & Intelligence Officer. 
+            
+            OUTPUT RULES:
+            1. Format your response in clean Markdown (use ## for headers, **bold** for emphasis).
+            2. Be objective, critical, and extremely detailed.
+            3. If the document contains sensitive PII (Personally Identifiable Information), flag it in a warning block at the top.
+            4. Never hallucinate facts not present in the text.
+        """.trimIndent()
 
         val config = ModelConfig(
             model = ModelName.PRO, // Pro is better for large context/reasoning
-            temperature = 0.5,
-            systemInstruction = "You are a Senior Document Analyst. Your output should be structured, professional, and incredibly detailed."
+            temperature = 0.3, // Lower temperature for factual accuracy
+            systemInstruction = systemInstruction
         )
 
-        // API Key Placeholder
-        val apiKey = "YOUR_API_KEY_HERE"
-
         viewModelScope.launch {
+            // FIX 4: Use validated apiKey
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = fullPrompt,
@@ -73,7 +94,7 @@ class DocIntelViewModel @Inject constructor(
                         _analysis.value += result.text
                     }
                     is StreamResult.Error -> {
-                        _analysis.value = "Error processing document: ${result.message}"
+                        _analysis.value = "## 🛑 System Error\n\nFailed to process document.\nError Details: ${result.message}"
                         _isProcessing.value = false
                     }
                     is StreamResult.Metadata -> { /* Ignore */ }
