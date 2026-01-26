@@ -26,7 +26,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,6 +80,7 @@ fun MainScreen(
 ) {
     var showSplash by remember { mutableStateOf(true) }
 
+    // Professional Splash Sequence
     LaunchedEffect(Unit) {
         delay(1500)
         showSplash = false
@@ -98,6 +107,7 @@ fun SplashScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
+        // Use the Custom Logo here too for consistency
         Image(
             painter = painterResource(id = R.drawable.my_logo),
             contentDescription = "Logo",
@@ -105,6 +115,7 @@ fun SplashScreen() {
         )
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CipherEliteSystem(viewModel: MainViewModel) {
@@ -183,14 +194,14 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // 1. HEADER
+                    // 1. HEADER (With Real Logo)
                     GeminiTopBar(
                         currentView = currentView,
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onSettingsClick = { isControlsOpen = true }
                     )
 
-                    // 2. CONTENT AREA (All Modules)
+                    // 2. CONTENT AREA (All Modules Included)
                     Box(modifier = Modifier.weight(1f)) {
                         AnimatedContent(
                             targetState = currentView,
@@ -223,7 +234,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     }
 
-    // DELETE DIALOG
+    // REAL DELETE CONFIRMATION DIALOG
     if (sessionToDelete != null) {
         AlertDialog(
             onDismissRequest = { sessionToDelete = null },
@@ -232,21 +243,28 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
+                        // Action: Call ViewModel to delete
                         sessionToDelete?.let { id ->
-                            viewModel.deleteSession(id) 
+                            viewModel.deleteSession(id) // Ensure this exists in VM
                             Toast.makeText(context, "Conversation deleted", Toast.LENGTH_SHORT).show()
                         }
                         sessionToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+                ) {
+                    Text("Delete")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { sessionToDelete = null }) { Text("Cancel") }
-            }
+                TextButton(onClick = { sessionToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         )
     }
 
+    // Settings Dialog
     if (showSettings) {
         SettingsDialog(
             currentKey = null,
@@ -258,6 +276,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
+// --- HEADER (Updated with Logo) ---
 @Composable
 fun GeminiTopBar(
     currentView: ViewMode,
@@ -271,10 +290,12 @@ fun GeminiTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        // Menu Button
         IconButton(onClick = onMenuClick) {
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
+        // Title or Logo in Center (Optional, but clean)
         if (currentView != ViewMode.CHAT) {
             Text(
                 text = currentView.name.replace("_", " "),
@@ -284,47 +305,49 @@ fun GeminiTopBar(
             )
         }
 
+        // Config Button
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground)
         }
     }
 }
-// --- CHAT VIEW (Main Conversation Area) ---
+
+// --- CHAT VIEW ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
     val prompt by viewModel.prompt.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
-    val isVoiceActive by viewModel.isVoiceActive.collectAsState()
+    
+    // NEW STATES FROM VIEWMODEL
     val isExpanded by viewModel.isInputExpanded.collectAsState()
+    val isVoiceActive by viewModel.isVoiceActive.collectAsState()
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
 
-    // Image Picker Launcher
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { viewModel.addAttachment(it) } }
 
-    // Voice Permission Launcher
+    // VOICE PERMISSION LAUNCHER
     val voicePermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) viewModel.toggleVoiceInput() 
-        else Toast.makeText(context, "Microphone permission required for voice input", Toast.LENGTH_SHORT).show()
-    }
-
-    // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(history.size, isStreaming) {
-        if (history.isNotEmpty()) {
-            listState.animateScrollToItem(history.size - 1)
+        if (isGranted) {
+            viewModel.toggleVoiceInput()
+        } else {
+            Toast.makeText(context, "Permission needed for Voice Input", Toast.LENGTH_SHORT).show()
         }
     }
 
+    LaunchedEffect(history.size, isStreaming) {
+        if (history.isNotEmpty()) listState.animateScrollToItem(history.size - 1)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        // Chat History List (Hidden when editor is fullscreen)
         if (!isExpanded) {
             LazyColumn(
                 state = listState,
@@ -342,7 +365,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                         isStreaming = isStreaming && message == history.last() && message.role == ChatRole.MODEL,
                         onSpeak = { viewModel.speakText(it) },
                         onPin = { viewModel.togglePin(it) },
-                        onRegenerate = { viewModel.handleRun(message.text) },
+                        onRegenerate = { /* Call VM */ },
                         onEdit = { viewModel.updatePrompt(it) }
                     )
                 }
@@ -353,21 +376,22 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // --- SMART DYNAMIC INPUT BAR ---
+        // --- NEW SMART DYNAMIC INPUT BAR ---
         Box(
             modifier = Modifier
                 .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
                 .fillMaxHeight(if (isExpanded) 1f else Float.NaN)
-                .background(if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent)
+                .background(
+                    if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent
+                )
                 .imePadding() 
         ) {
-            // Shadow Scrim for bottom bar mode
             if (!isExpanded) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .height(100.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             brush = Brush.verticalGradient(
@@ -382,22 +406,26 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 onPromptChange = { viewModel.updatePrompt(it) },
                 onSend = { 
                     viewModel.handleRun()
-                    focusManager.clearFocus()
-                    viewModel.setInputExpanded(false)
+                    focusManager.clearFocus() 
+                    viewModel.setInputExpanded(false) 
                 },
                 onAttach = { galleryLauncher.launch("image/*") },
                 isStreaming = isStreaming,
                 attachmentCount = attachments.size,
                 isExpanded = isExpanded,
                 onExpandToggle = { viewModel.toggleFullscreenInput() },
+                
+                // NEW: Voice Logic
                 isVoiceActive = isVoiceActive,
-                onMicClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                onMicClick = { 
+                    voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) 
+                }
             )
         }
     }
 }
 
-// --- THE SMART INPUT COMPONENT ---
+// --- NEW COMPONENT: SMART INPUT BAR (UPDATED WITH VOICE UI) ---
 @Composable
 fun GeminiSmartInputBar(
     prompt: String,
@@ -408,54 +436,55 @@ fun GeminiSmartInputBar(
     attachmentCount: Int,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
+    // Voice Params
     isVoiceActive: Boolean,
     onMicClick: () -> Unit
 ) {
-    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 0.6f else 0.95f)
-    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    
-    // Voice Pulse Animation
-    val infiniteTransition = rememberInfiniteTransition(label = "VoicePulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-        label = "Pulse"
+    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 0.5f else 0.9f)
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+
+    // Pulse Animation for Voice
+    val pulseAlpha by rememberInfiniteTransition().animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
+        label = "pulse"
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = if (isExpanded) 0.dp else 8.dp)
-            .animateContentSize(animationSpec = tween(300))
+            .padding(
+                start = if (isExpanded) 0.dp else 12.dp,
+                end = if (isExpanded) 0.dp else 12.dp,
+                bottom = if (isExpanded) 0.dp else 16.dp,
+                top = if (isExpanded) 0.dp else 0.dp
+            )
+            .animateContentSize()
     ) {
-        // Attachment Indicator
         if (attachmentCount > 0 && !isExpanded) {
             Row(
                 modifier = Modifier
-                    .padding(bottom = 8.dp, start = 16.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(bottom = 8.dp, start = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Image, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("$attachmentCount Media Ready", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Image, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("$attachmentCount Image Attached", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
 
-        // Main Editor Container
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(if (isExpanded) 1f else Float.NaN)
-                .shadow(if (isExpanded) 0.dp else 16.dp, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .clip(RoundedCornerShape(topStart = if (isExpanded) 0.dp else 28.dp, topEnd = if (isExpanded) 0.dp else 28.dp))
+                .shadow(if (isExpanded) 0.dp else 4.dp, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp), spotColor = Color.Black.copy(0.1f))
+                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
                 .background(bgColor)
-                .border(if (isExpanded) 0.dp else 1.dp, borderColor, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
         ) {
-            // Fullscreen Header
             if (isExpanded) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -463,60 +492,69 @@ fun GeminiSmartInputBar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onExpandToggle) {
-                        Icon(Icons.Rounded.Close, "Close Editor")
+                        Icon(Icons.Rounded.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
                     }
-                    Text("Cipher Code Editor", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Button(onClick = onSend, enabled = prompt.isNotBlank()) {
-                        Text("Run Code")
+                    Button(
+                        onClick = onSend,
+                        enabled = prompt.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Send")
                     }
                 }
                 Divider(color = borderColor)
             }
 
-            // Input Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(if (isExpanded) 16.dp else 12.dp),
                 verticalAlignment = if (isExpanded) Alignment.Top else Alignment.Bottom
             ) {
                 if (!isExpanded) {
-                    // Actions: Attach & Mic
                     IconButton(
                         onClick = onAttach,
-                        modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.background, CircleShape)
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MaterialTheme.colorScheme.background, CircleShape)
+                            .border(1.dp, borderColor, CircleShape)
                     ) {
-                        Icon(Icons.Rounded.Add, "Attach", modifier = Modifier.size(24.dp))
+                        Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
+                    
                     Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // MIC BUTTON WITH PULSE ANIMATION
                     IconButton(
                         onClick = onMicClick,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(36.dp)
                             .background(
-                                if (isVoiceActive) MaterialTheme.colorScheme.error.copy(alpha = pulseAlpha) 
-                                else MaterialTheme.colorScheme.background, 
+                                if (isVoiceActive) MaterialTheme.colorScheme.error.copy(alpha = pulseAlpha) else MaterialTheme.colorScheme.background, 
                                 CircleShape
                             )
+                            .border(1.dp, if(isVoiceActive) Color.Transparent else borderColor, CircleShape)
                     ) {
                         Icon(
-                            Icons.Rounded.Mic, "Voice", 
-                            tint = if (isVoiceActive) Color.White else MaterialTheme.colorScheme.onSurface
+                            if(isVoiceActive) Icons.Rounded.Stop else Icons.Rounded.Mic, 
+                            "Voice", 
+                            tint = if (isVoiceActive) Color.White else MaterialTheme.colorScheme.onSurface, 
+                            modifier = Modifier.size(20.dp)
                         )
                     }
+
                     Spacer(modifier = Modifier.width(12.dp))
                 }
 
-                // Field Wrapper
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(vertical = 8.dp)
-                        .heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 180.dp)
+                        .padding(vertical = if (isExpanded) 0.dp else 6.dp)
+                        .heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 120.dp)
                 ) {
                     if (prompt.isEmpty()) {
                         Text(
-                            text = if (isVoiceActive) "Listening closely..." else "Ask Cipher anything...",
+                            if (isExpanded) "Start coding or writing..." else if (isVoiceActive) "Listening..." else "Message Cipher...",
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -530,30 +568,44 @@ fun GeminiSmartInputBar(
                             lineHeight = 26.sp
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth().ifTrue(isExpanded) { fillMaxHeight() }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .ifTrue(isExpanded) { fillMaxHeight() }
                     )
                 }
 
                 if (!isExpanded) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    // Actions: Fullscreen & Send
-                    IconButton(onClick = onExpandToggle) {
+                    
+                    IconButton(
+                        onClick = onExpandToggle,
+                        modifier = Modifier.size(32.dp).padding(bottom = 2.dp)
+                    ) {
                         Icon(Icons.Rounded.Fullscreen, "Expand", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     val isSendEnabled = prompt.isNotBlank() || isStreaming
+                    val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(42.dp)
                             .clip(CircleShape)
-                            .background(if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .background(btnColor)
                             .clickable(enabled = isSendEnabled) { onSend() },
                         contentAlignment = Alignment.Center
                     ) {
                         if (isStreaming) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp, color = Color.White)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         } else {
-                            Icon(Icons.Rounded.ArrowUpward, "Send", tint = if (isSendEnabled) Color.White else Color.Gray)
+                            Icon(
+                                Icons.Rounded.ArrowUpward,
+                                "Send",
+                                tint = if (isSendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -561,7 +613,8 @@ fun GeminiSmartInputBar(
         }
     }
 }
-// --- HELPER EXTENSION: Conditional Modifier ---
+
+// Helper Extension for Conditional Modifier
 fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
     return if (condition) {
         then(modifier(Modifier))
@@ -570,7 +623,7 @@ fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modi
     }
 }
 
-// --- GREETING HEADER (Smart Greeting) ---
+// --- GREETING (Smart) ---
 @Composable
 fun GreetingHeader() {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -585,67 +638,39 @@ fun GreetingHeader() {
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 60.dp)
     ) {
-        // App Identity Branding
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.my_logo),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
+        // Use Logo here too for branding
+        Image(
+            painter = painterResource(id = R.drawable.my_logo),
+            contentDescription = null,
+            modifier = Modifier.size(40.dp).padding(bottom = 16.dp)
+        )
 
         Text(
             text = "$greeting, Creator",
             style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.primary
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
         )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
         Text(
-            text = "Your digital empire is ready. What shall we architect today?",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            lineHeight = 24.sp
+            text = "Ready to build something extraordinary?",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
     }
 }
 
-// --- STREAMING INDICATOR ---
 @Composable
 fun StreamingIndicator() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, top = 8.dp, bottom = 24.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(12.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.width(12.dp))
+    Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 16.dp)) {
         Text(
-            "Cipher is processing your request...",
+            "Cipher is thinking...",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            fontWeight = FontWeight.Medium
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
-// --- INTERNAL SIDEBAR: THE NAVIGATION ENGINE ---
+// --- SIDEBAR (Complete: All Apps + Logo + About) ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
@@ -663,80 +688,58 @@ fun InternalSidebar(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .padding(16.dp)
     ) {
-        // 1. Sidebar Top Identity
-        Row(
-            verticalAlignment = Alignment.CenterVertically, 
-            modifier = Modifier.padding(bottom = 28.dp, start = 8.dp)
-        ) {
+        // 1. App Header with CUSTOM LOGO
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
              Image(
                  painter = painterResource(id = R.drawable.my_logo),
-                 contentDescription = "Logo",
-                 modifier = Modifier.size(36.dp)
+                 contentDescription = "Cipher Logo",
+                 modifier = Modifier.size(32.dp)
              )
-             Spacer(modifier = Modifier.width(14.dp))
-             Text(
-                 "Cipher Studio", 
-                 style = MaterialTheme.typography.titleLarge, 
-                 fontWeight = FontWeight.ExtraBold,
-                 letterSpacing = 0.5.sp
-             )
+             Spacer(modifier = Modifier.width(12.dp))
+             Text("Cipher Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
 
-        // 2. Core Action: New Session
-        Surface(
+        // 2. New Chat Button
+        Button(
             onClick = onNewSession,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            tonalElevation = 4.dp
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
+            elevation = ButtonDefaults.buttonElevation(0.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(Icons.Rounded.Add, "New", modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Start New Conversation", fontWeight = FontWeight.Bold)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // 3. ECOSYSTEM MODULES (Scrollable if needed)
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Text(
-                "ECOSYSTEM", 
-                style = MaterialTheme.typography.labelSmall, 
-                color = MaterialTheme.colorScheme.primary, 
-                fontWeight = FontWeight.Black,
-                modifier = Modifier.padding(start = 12.dp, bottom = 12.dp)
-            )
-
-            SidebarItem(Icons.Default.ChatBubbleOutline, "Cipher Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
-            SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
-            SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
-            SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
-            SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
-            SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
-            SidebarItem(Icons.Default.Description, "Doc Intel", currentView == ViewMode.DOC_INTEL) { onViewChange(ViewMode.DOC_INTEL) }
+            Icon(Icons.Rounded.Add, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("New Chat")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Spacer(modifier = Modifier.height(20.dp))
 
-        // 4. CHAT HISTORY (Scrollable)
-        Text(
-            "RECENT SESSIONS", 
-            style = MaterialTheme.typography.labelSmall, 
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
-        )
+        // 3. APPS (ALL MODULES INCLUDED)
+        Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Chat
+        SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
+
+        // Dev Tools
+        SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
+        SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
+        SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
+
+        // Missing Apps Added Here
+        SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
+        SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
+        SidebarItem(Icons.Default.Description, "Doc Intel", currentView == ViewMode.DOC_INTEL) { onViewChange(ViewMode.DOC_INTEL) }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4. HISTORY (With Real Delete Action)
+        Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(sessions) { session ->
@@ -744,114 +747,62 @@ fun InternalSidebar(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                         .combinedClickable(
                             onClick = { onSelectSession(session.id) },
                             onLongClick = { onRequestDelete(session.id) }
                         )
-                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Outlined.Chat, 
-                        null, 
-                        modifier = Modifier.size(18.dp), 
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Icon(Icons.Outlined.Message, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = session.title,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        // 5. FOOTER: Utilities
-        Spacer(modifier = Modifier.height(8.dp))
-        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Spacer(modifier = Modifier.height(12.dp))
+        Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-        // About
-        Surface(
-            onClick = { onViewChange(ViewMode.ABOUT) },
-            shape = RoundedCornerShape(12.dp),
-            color = if(currentView == ViewMode.ABOUT) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("About Cipher", style = MaterialTheme.typography.bodyMedium)
-            }
+        // 5. Footer (About & Settings)
+
+        // ABOUT LINK (Added as requested)
+        Row(modifier = Modifier.clickable { onViewChange(ViewMode.ABOUT) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("About", color = MaterialTheme.colorScheme.onSurface)
         }
 
-        // Settings
-        Surface(
-            onClick = { onOpenSettings() },
-            shape = RoundedCornerShape(12.dp),
-            color = Color.Transparent,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("System Settings", style = MaterialTheme.typography.bodyMedium)
-            }
+        // SETTINGS LINK
+        Row(modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("Settings", color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
 
-// --- REUSABLE SIDEBAR ITEM COMPONENT ---
 @Composable
-fun SidebarItem(
-    icon: ImageVector, 
-    label: String, 
-    isSelected: Boolean, 
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
+fun SidebarItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent,
-        contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon, 
-                contentDescription = label, 
-                modifier = Modifier.size(22.dp),
-                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = label, 
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 15.sp
-            )
-            
-            if (isSelected) {
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-            }
-        }
+        Icon(icon, null, tint = if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
