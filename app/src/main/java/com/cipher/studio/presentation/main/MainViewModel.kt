@@ -11,7 +11,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Base64
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cipher.studio.data.local.ApiKeyManager
@@ -37,13 +36,14 @@ class MainViewModel @Inject constructor(
     private val application: Application
 ) : AndroidViewModel(application) {
 
-    // --- Existing State ---
+    // --- Core State ---
     private val _isAuthorized = MutableStateFlow(storageManager.isAuthorized())
     val isAuthorized = _isAuthorized.asStateFlow()
 
     private val _theme = MutableStateFlow(if(storageManager.isDarkTheme()) Theme.DARK else Theme.LIGHT)
     val theme = _theme.asStateFlow()
 
+    // --- Chat State ---
     private val _history = MutableStateFlow<List<ChatMessage>>(emptyList())
     val history = _history.asStateFlow()
 
@@ -56,12 +56,21 @@ class MainViewModel @Inject constructor(
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming = _isStreaming.asStateFlow()
 
+    // --- UI Layout State ---
     private val _currentView = MutableStateFlow(ViewMode.CHAT)
     val currentView = _currentView.asStateFlow()
 
     private val _isSidebarOpen = MutableStateFlow(false)
     val isSidebarOpen = _isSidebarOpen.asStateFlow()
 
+    // --- Advanced UI States (NEW) ---
+    private val _isVoiceActive = MutableStateFlow(false)
+    val isVoiceActive = _isVoiceActive.asStateFlow()
+
+    private val _isInputExpanded = MutableStateFlow(false)
+    val isInputExpanded = _isInputExpanded.asStateFlow()
+
+    // --- Session & Config ---
     private val _sessions = MutableStateFlow<List<Session>>(emptyList())
     val sessions = _sessions.asStateFlow()
 
@@ -71,17 +80,12 @@ class MainViewModel @Inject constructor(
     private val _config = MutableStateFlow(AppConstants.DEFAULT_CONFIG)
     val config = _config.asStateFlow()
 
-    // --- NEW STATES: Voice & Fullscreen ---
-    private val _isVoiceActive = MutableStateFlow(false)
-    val isVoiceActive = _isVoiceActive.asStateFlow()
-
-    private val _isInputExpanded = MutableStateFlow(false)
-    val isInputExpanded = _isInputExpanded.asStateFlow()
-
+    // --- System Services ---
     private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
 
     init {
+        // Load Data
         val savedSessions = storageManager.getSessions()
         if (savedSessions.isNotEmpty()) {
             _sessions.value = savedSessions
@@ -90,39 +94,36 @@ class MainViewModel @Inject constructor(
             createNewSession()
         }
 
-        // Initialize TTS
+        // Init Text-to-Speech
         tts = TextToSpeech(application) { status ->
             if (status != TextToSpeech.ERROR) tts?.language = Locale.US
         }
 
-        // Initialize Speech Recognizer (Real Logic)
+        // Init Speech Recognition
         initSpeechRecognizer()
     }
 
-    // --- VOICE INPUT LOGIC (REAL) ---
+    // --- VOICE INPUT LOGIC (REAL IMPLEMENTATION) ---
     private fun initSpeechRecognizer() {
         if (SpeechRecognizer.isRecognitionAvailable(application)) {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(application)
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
+                override fun onBeginningOfSpeech() { _isVoiceActive.value = true }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    _isVoiceActive.value = false
-                }
-
+                override fun onEndOfSpeech() { _isVoiceActive.value = false }
+                
                 override fun onError(error: Int) {
                     _isVoiceActive.value = false
-                    // Simple error handling, could be more detailed
-                    // Toast.makeText(application, "Voice Error: $error", Toast.LENGTH_SHORT).show()
+                    // Optional: Handle specific error codes here
                 }
 
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     if (!matches.isNullOrEmpty()) {
                         val spokenText = matches[0]
-                        // Append to existing prompt or set new
+                        // Append to existing text smartly
                         val currentText = _prompt.value
                         _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
                     }
@@ -137,11 +138,9 @@ class MainViewModel @Inject constructor(
 
     fun toggleVoiceInput() {
         if (_isVoiceActive.value) {
-            // Stop
             speechRecognizer?.stopListening()
             _isVoiceActive.value = false
         } else {
-            // Start
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
@@ -157,6 +156,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // --- FULLSCREEN EDITOR LOGIC ---
     fun toggleFullscreenInput() {
         _isInputExpanded.value = !_isInputExpanded.value
     }
@@ -165,13 +165,13 @@ class MainViewModel @Inject constructor(
         _isInputExpanded.value = expanded
     }
 
-    // --- Actions ---
-
-    fun setAuthorized(auth: Boolean) {
-        _isAuthorized.value = auth
-        storageManager.setAuthorized(auth)
+    // --- CONFIGURATION LINK ---
+    fun updateConfig(newConfig: ModelConfig) {
+        _config.value = newConfig
+        saveSessionsToDisk() // Persist changes immediately
     }
 
+    // --- SESSION MANAGEMENT ---
     fun createNewSession() {
         val newSession = Session(
             id = UUID.randomUUID().toString(),
@@ -190,11 +190,7 @@ class MainViewModel @Inject constructor(
         _history.value = session.history
         _config.value = session.config
         _isSidebarOpen.value = false
-    }
-
-    fun updateConfig(newConfig: ModelConfig) {
-        _config.value = newConfig
-        saveSessionsToDisk()
+        _isInputExpanded.value = false // Reset expanded view on switch
     }
 
     fun deleteSession(sessionId: String) {
@@ -215,7 +211,11 @@ class MainViewModel @Inject constructor(
         val currentId = _currentSessionId.value
         if (currentId != null) {
             val updatedList = _sessions.value.map { 
-                if (it.id == currentId) it.copy(history = _history.value, config = _config.value, lastModified = System.currentTimeMillis()) 
+                if (it.id == currentId) it.copy(
+                    history = _history.value, 
+                    config = _config.value, // Save current config
+                    lastModified = System.currentTimeMillis()
+                ) 
                 else it 
             }
             _sessions.value = updatedList
@@ -223,7 +223,100 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // --- Image Handling ---
+    // --- CHAT LOGIC ---
+    fun handleRun(overridePrompt: String? = null) {
+        val textToRun = overridePrompt ?: _prompt.value
+        val attachmentsToUse = if (overridePrompt != null) emptyList() else _attachments.value
+
+        if ((textToRun.isBlank() && attachmentsToUse.isEmpty()) || _isStreaming.value) return
+
+        val apiKey = apiKeyManager.getApiKey()
+        if (apiKey.isNullOrBlank()) {
+            addSystemMessage("⚠️ SYSTEM ALERT: No API Key found. Please add it in Settings.")
+            return
+        }
+
+        // Create User Message
+        val userMsg = ChatMessage(
+            id = UUID.randomUUID().toString(),
+            role = ChatRole.USER,
+            text = textToRun,
+            timestamp = System.currentTimeMillis(),
+            attachments = attachmentsToUse
+        )
+
+        val currentHistory = _history.value + userMsg
+        _history.value = currentHistory
+
+        // Clear inputs
+        if (overridePrompt == null) {
+            _prompt.value = ""
+            clearAttachments()
+        }
+        _isStreaming.value = true
+
+        // Update Title if it's the first message
+        if (currentHistory.size == 1) {
+            val title = textToRun.take(30) + "..."
+            val currentId = _currentSessionId.value
+            if (currentId != null) {
+                _sessions.value = _sessions.value.map { if (it.id == currentId) it.copy(title = title) else it }
+            }
+        }
+
+        // Add Placeholder for AI Response
+        val modelMsgId = UUID.randomUUID().toString()
+        val placeholderMsg = ChatMessage(modelMsgId, ChatRole.MODEL, "", System.currentTimeMillis())
+        _history.value = currentHistory + placeholderMsg
+
+        saveSessionsToDisk()
+
+        viewModelScope.launch {
+            var fullResponse = ""
+
+            // USE CURRENT CONFIG (Fix for model switching)
+            aiService.generateContentStream(
+                apiKey = apiKey,
+                prompt = userMsg.text,
+                attachments = userMsg.attachments,
+                history = currentHistory,
+                config = _config.value 
+            ).collect { result ->
+                when (result) {
+                    is StreamResult.Content -> {
+                        fullResponse += result.text
+                        updateLastMessage(fullResponse)
+                    }
+                    is StreamResult.Error -> {
+                        updateLastMessage(fullResponse + "\n\n[Error: ${result.message}]")
+                        _isStreaming.value = false
+                        saveSessionsToDisk()
+                    }
+                    else -> {}
+                }
+            }
+            _isStreaming.value = false
+            saveSessionsToDisk()
+        }
+    }
+
+    // --- HELPER FUNCTIONS ---
+
+    private fun updateLastMessage(newText: String) {
+        val list = _history.value.toMutableList()
+        if (list.isNotEmpty()) {
+            val last = list.last()
+            if (last.role == ChatRole.MODEL) {
+                list[list.lastIndex] = last.copy(text = newText)
+                _history.value = list.toList()
+            }
+        }
+    }
+
+    private fun addSystemMessage(text: String) {
+        _history.value = _history.value + ChatMessage(role = ChatRole.MODEL, text = text, timestamp = System.currentTimeMillis())
+    }
+
     fun addAttachment(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -248,97 +341,8 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun clearAttachments() {
-        _attachments.value = emptyList()
-    }
-
-    // --- Chat Logic ---
-    fun handleRun(overridePrompt: String? = null) {
-        val textToRun = overridePrompt ?: _prompt.value
-        val attachmentsToUse = if (overridePrompt != null) emptyList() else _attachments.value
-
-        if ((textToRun.isBlank() && attachmentsToUse.isEmpty()) || _isStreaming.value) return
-
-        val apiKey = apiKeyManager.getApiKey()
-        if (apiKey.isNullOrBlank()) {
-            addSystemMessage("⚠️ SYSTEM ALERT: No API Key found. Please add it in Settings.")
-            return
-        }
-
-        val userMsg = ChatMessage(
-            id = UUID.randomUUID().toString(),
-            role = ChatRole.USER,
-            text = textToRun,
-            timestamp = System.currentTimeMillis(),
-            attachments = attachmentsToUse
-        )
-
-        val currentHistory = _history.value + userMsg
-        _history.value = currentHistory
-
-        if (overridePrompt == null) {
-            _prompt.value = ""
-            clearAttachments() 
-        }
-        _isStreaming.value = true
-
-        if (currentHistory.size == 1) {
-            val title = textToRun.take(30) + "..."
-            val currentId = _currentSessionId.value
-            if (currentId != null) {
-                _sessions.value = _sessions.value.map { if (it.id == currentId) it.copy(title = title) else it }
-            }
-        }
-
-        val modelMsgId = UUID.randomUUID().toString()
-        val placeholderMsg = ChatMessage(modelMsgId, ChatRole.MODEL, "", System.currentTimeMillis())
-        _history.value = currentHistory + placeholderMsg
-
-        saveSessionsToDisk()
-
-        viewModelScope.launch {
-            var fullResponse = ""
-
-            aiService.generateContentStream(
-                apiKey = apiKey,
-                prompt = userMsg.text,
-                attachments = userMsg.attachments,
-                history = currentHistory,
-                config = _config.value
-            ).collect { result ->
-                when (result) {
-                    is StreamResult.Content -> {
-                        fullResponse += result.text
-                        updateLastMessage(fullResponse)
-                    }
-                    is StreamResult.Error -> {
-                        updateLastMessage(fullResponse + "\n\n[Error: ${result.message}]")
-                        _isStreaming.value = false
-                        saveSessionsToDisk()
-                    }
-                    else -> {}
-                }
-            }
-            _isStreaming.value = false
-            saveSessionsToDisk()
-        }
-    }
-
-    private fun updateLastMessage(newText: String) {
-        val list = _history.value.toMutableList()
-        if (list.isNotEmpty()) {
-            val last = list.last()
-            if (last.role == ChatRole.MODEL) {
-                list[list.lastIndex] = last.copy(text = newText)
-                _history.value = list.toList()
-            }
-        }
-    }
-
-    private fun addSystemMessage(text: String) {
-        _history.value = _history.value + ChatMessage(role = ChatRole.MODEL, text = text, timestamp = System.currentTimeMillis())
-    }
-
+    fun clearAttachments() { _attachments.value = emptyList() }
+    fun setAuthorized(auth: Boolean) { _isAuthorized.value = auth; storageManager.setAuthorized(auth) }
     fun saveApiKey(key: String) { apiKeyManager.saveApiKey(key) }
     fun removeApiKey() { apiKeyManager.clearApiKey() }
     fun toggleSidebar() { _isSidebarOpen.value = !_isSidebarOpen.value }
@@ -350,10 +354,11 @@ class MainViewModel @Inject constructor(
         saveSessionsToDisk()
     }
 
+    // --- CLEANUP ---
     override fun onCleared() {
         super.onCleared()
         tts?.stop()
         tts?.shutdown()
-        speechRecognizer?.destroy() // Cleanup
+        speechRecognizer?.destroy()
     }
 }
