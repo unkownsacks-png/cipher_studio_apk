@@ -39,14 +39,15 @@ fun ControlPanel(
     val isDark = theme == Theme.DARK
     val haptic = LocalHapticFeedback.current
 
-    // Panel Colors
-    val panelBg = if (isDark) Color(0xFF0F172A).copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f)
-    val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Black.copy(0.1f)
-    val textColor = if (isDark) Color.White else Color(0xFF1F2937)
-    val labelColor = if (isDark) Color.Gray else Color.Gray
+    // DESIGN UPDATE: Faint/Pale Colors (Clean Aesthetic)
+    val panelBg = if (isDark) Color(0xFF1C1C1E).copy(alpha = 0.98f) else Color(0xFFF9F9FB).copy(alpha = 0.98f)
+    val borderColor = if (isDark) Color.White.copy(0.08f) else Color.Black.copy(0.06f)
+    val textColor = if (isDark) Color(0xFFE5E5E5) else Color(0xFF333333)
+    val labelColor = if (isDark) Color(0xFFA1A1AA) else Color(0xFF8E8E93)
+    val accentColor = if (isDark) Color(0xFFE2E2E2) else Color(0xFF555555) // Desaturated Accent
 
     // 1. STATE MANAGEMENT (CRITICAL FIX)
-    // We use local state for sliders to ensure smooth UI updates, then sync on finish
+    // We use local state for sliders to ensure smooth UI updates
     var localTemp by remember(config.temperature) { mutableFloatStateOf(config.temperature.toFloat()) }
     var localTokens by remember(config.maxOutputTokens) { mutableFloatStateOf(config.maxOutputTokens.toFloat()) }
 
@@ -61,45 +62,51 @@ fun ControlPanel(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
+                .background(Color.Black.copy(alpha = 0.2f)) // Softer Overlay
                 .clickable { onClose() }
         ) {
             // The Actual Panel (Aligned Right)
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .width(320.dp)
+                    .width(340.dp) // Slightly wider for elegance
                     .fillMaxHeight()
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(24.dp)) // Softer Corners
                     .background(panelBg)
-                    .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-                    .clickable(enabled = false) {} // Prevent click-through to overlay
+                    .border(1.dp, borderColor, RoundedCornerShape(24.dp))
+                    .clickable(enabled = false) {} // Prevent click-through
                     .verticalScroll(rememberScrollState())
             ) {
                 // --- Header ---
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .height(72.dp)
                         .padding(horizontal = 24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Settings",
-                            tint = if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(if(isDark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Settings",
+                                tint = textColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "CONFIGURATION",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = textColor,
-                            letterSpacing = 1.sp
+                            text = "Model Config",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            color = textColor
                         )
                     }
                     IconButton(onClick = onClose) {
@@ -114,23 +121,27 @@ fun ControlPanel(
 
                     // 1. Model Selection (CRITICAL FIX)
                     Text(
-                        text = "AI MODEL",
+                        text = "INTELLIGENCE MODEL",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = labelColor,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 12.dp),
+                        letterSpacing = 0.5.sp
                     )
 
                     ModelDropdown(
                         currentModel = config.model,
-                        onModelSelected = { 
-                            onChange(config.copy(model = it))
+                        onModelSelected = { newModel ->
+                            // CRITICAL: Link to ViewModel
+                            onChange(config.copy(model = newModel))
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
-                        isDark = isDark
+                        isDark = isDark,
+                        textColor = textColor,
+                        borderColor = borderColor
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
 
                     // --- 2. ADVANCED FEATURE: AI PRESETS ---
                     Text(
@@ -138,95 +149,125 @@ fun ControlPanel(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = labelColor,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 12.dp),
+                        letterSpacing = 0.5.sp
                     )
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PresetButton("Precise", isDark) {
+                        PresetButton("Precise", isDark, borderColor, textColor) {
                             localTemp = 0.1f; localTokens = 2000f
                             onChange(config.copy(temperature = 0.1, maxOutputTokens = 2000))
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
-                        PresetButton("Balanced", isDark) {
+                        PresetButton("Balanced", isDark, borderColor, textColor) {
                             localTemp = 0.7f; localTokens = 8000f
                             onChange(config.copy(temperature = 0.7, maxOutputTokens = 8000))
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
-                        PresetButton("Creative", isDark) {
+                        PresetButton("Creative", isDark, borderColor, textColor) {
                             localTemp = 1.5f; localTokens = 16000f
                             onChange(config.copy(temperature = 1.5, maxOutputTokens = 16000))
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(36.dp))
 
                     // 3. Temperature Slider
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Creativity (Temp)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = labelColor
-                        )
-                        // Animated Number Display
-                        AnimatedContent(targetState = localTemp, label = "temp") { targetTemp ->
+                        Column {
                             Text(
-                                text = String.format("%.1f", targetTemp),
-                                fontSize = 12.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                color = if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)
+                                text = "Temperature",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = textColor
                             )
+                            Text(
+                                text = "Creativity & Randomness",
+                                fontSize = 11.sp,
+                                color = labelColor
+                            )
+                        }
+                        // Animated Number Display
+                        Box(
+                            modifier = Modifier
+                                .background(if(isDark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            AnimatedContent(targetState = localTemp, label = "temp") { targetTemp ->
+                                Text(
+                                    text = String.format("%.1f", targetTemp),
+                                    fontSize = 12.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = textColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     CustomSlider(
                         value = localTemp,
-                        onValueChange = { 
-                            localTemp = it 
+                        onValueChange = {
+                            localTemp = it
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         },
                         onValueChangeFinished = {
                             onChange(config.copy(temperature = (localTemp * 10).roundToInt() / 10.0))
                         },
                         valueRange = 0f..2f,
-                        isDark = isDark
+                        isDark = isDark,
+                        activeColor = accentColor
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(36.dp))
 
                     // 4. Max Tokens Slider
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Max Length (Tokens)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = labelColor
-                        )
-                        AnimatedContent(targetState = localTokens, label = "tokens") { targetTokens ->
+                        Column {
                             Text(
-                                text = targetTokens.toInt().toString(),
-                                fontSize = 12.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                color = if (isDark) Color(0xFFEC4899) else Color(0xFFDB2777)
+                                text = "Max Length",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = textColor
                             )
+                            Text(
+                                text = "Response Token Limit",
+                                fontSize = 11.sp,
+                                color = labelColor
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(if(isDark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            AnimatedContent(targetState = localTokens, label = "tokens") { targetTokens ->
+                                Text(
+                                    text = targetTokens.toInt().toString(),
+                                    fontSize = 12.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = textColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     CustomSlider(
                         value = localTokens,
-                        onValueChange = { 
+                        onValueChange = {
                             localTokens = it
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         },
@@ -235,10 +276,10 @@ fun ControlPanel(
                         },
                         valueRange = 100f..32000f,
                         isDark = isDark,
-                        trackColor = if (isDark) Color(0xFFEC4899) else Color(0xFFDB2777)
+                        activeColor = accentColor
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(36.dp))
 
                     // 5. Safety Settings (Compliance)
                     HorizontalDivider(color = borderColor)
@@ -249,19 +290,20 @@ fun ControlPanel(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "COMPLIANCE",
-                            fontSize = 10.sp,
+                            text = "SAFETY PROTOCOLS",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = labelColor
+                            color = labelColor,
+                            letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "UNLOCKED",
+                            text = "DISABLED",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF22C55E), // Green
+                            color = Color(0xFFE57373), // Soft Red
                             modifier = Modifier
-                                .background(Color(0xFF22C55E).copy(0.1f), RoundedCornerShape(4.dp))
-                                .border(1.dp, Color(0xFF22C55E).copy(0.2f), RoundedCornerShape(4.dp))
+                                .background(Color(0xFFE57373).copy(0.1f), RoundedCornerShape(4.dp))
+                                .border(1.dp, Color(0xFFE57373).copy(0.2f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -270,21 +312,21 @@ fun ControlPanel(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-                            .background(if (isDark) Color.White.copy(0.05f) else Color.White)
+                            .background(if (isDark) Color(0xFF2C2C2E).copy(0.5f) else Color(0xFFF2F2F7))
                             .padding(16.dp),
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Security, 
+                            imageVector = Icons.Default.PrivacyTip,
                             contentDescription = "Alert",
-                            tint = Color(0xFFF87171), 
+                            tint = labelColor,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Safety filters disabled. The model will respond to all queries without refusal.",
+                            text = "Standard filters are bypassed. The model will process all queries without restrictions.",
                             fontSize = 12.sp,
-                            color = if (isDark) Color.Gray else Color(0xFF4B5563),
+                            color = labelColor,
                             lineHeight = 18.sp
                         )
                     }
@@ -301,22 +343,22 @@ fun ControlPanel(
 fun ModelDropdown(
     currentModel: ModelName,
     onModelSelected: (ModelName) -> Unit,
-    isDark: Boolean
+    isDark: Boolean,
+    textColor: Color,
+    borderColor: Color
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    val bgColor = if (isDark) Color.Black.copy(0.2f) else Color.White
-    val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
-    val textColor = if (isDark) Color.White else Color(0xFF111827)
+    val bg = if (isDark) Color(0xFF2C2C2E) else Color(0xFFFFFFFF)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(bgColor)
+            .background(bg)
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .clickable { expanded = true }
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -324,35 +366,38 @@ fun ModelDropdown(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
+                // CRITICAL FIX: Enum Mapping Check
                 text = when(currentModel) {
-                    ModelName.FLASH -> "Gemini 2.5 Flash (Fast)"
-                    ModelName.PRO -> "Gemini 3.0 Pro (Deep)"
-                    ModelName.FLASH_LITE -> "Gemini Flash Lite (Eco)"
+                    ModelName.FLASH -> "Gemini 2.5 Flash"
+                    ModelName.PRO -> "Gemini 3.0 Pro"
+                    ModelName.FLASH_LITE -> "Gemini Flash Lite"
                 },
                 fontSize = 14.sp,
-                color = textColor
+                color = textColor,
+                fontWeight = FontWeight.Medium
             )
             Icon(Icons.Default.ArrowDropDown, null, tint = Color.Gray)
         }
 
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(if (isDark) Color(0xFF1E293B) else Color.White)
+            onDismissRequest = { expanded = false }, // Close on outside click
+            modifier = Modifier.background(bg).border(1.dp, borderColor, RoundedCornerShape(4.dp))
         ) {
             ModelName.values().forEach { model ->
                 DropdownMenuItem(
-                    text = { 
+                    text = {
                         Text(
                             text = when(model) {
                                 ModelName.FLASH -> "Gemini 2.5 Flash"
                                 ModelName.PRO -> "Gemini 3.0 Pro"
                                 ModelName.FLASH_LITE -> "Gemini Flash Lite"
                             },
-                            color = textColor 
-                        ) 
+                            color = textColor
+                        )
                     },
                     onClick = {
+                        // CRITICAL FIX: Close expanded inside selection
                         onModelSelected(model)
                         expanded = false
                     }
@@ -370,11 +415,10 @@ fun CustomSlider(
     onValueChangeFinished: () -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     isDark: Boolean,
-    trackColor: Color? = null
+    activeColor: Color
 ) {
     val thumbColor = Color.White
-    val activeTrackColor = trackColor ?: if (isDark) Color(0xFF3B82F6) else Color(0xFF2563EB)
-    val inactiveTrackColor = if (isDark) Color.Black.copy(0.3f) else Color(0xFFE5E7EB)
+    val inactiveTrackColor = if (isDark) Color.White.copy(0.1f) else Color.Black.copy(0.05f)
 
     Slider(
         value = value,
@@ -384,7 +428,7 @@ fun CustomSlider(
         // steps removed for smooth sliding (UI Refinement)
         colors = SliderDefaults.colors(
             thumbColor = thumbColor,
-            activeTrackColor = activeTrackColor,
+            activeTrackColor = activeColor,
             inactiveTrackColor = inactiveTrackColor
         ),
         modifier = Modifier.fillMaxWidth()
@@ -392,16 +436,13 @@ fun CustomSlider(
 }
 
 @Composable
-fun PresetButton(text: String, isDark: Boolean, onClick: () -> Unit) {
-    val borderColor = if (isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
-    val textColor = if (isDark) Color.White else Color.Black
-    
+fun PresetButton(text: String, isDark: Boolean, borderColor: Color, textColor: Color, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .border(1.dp, borderColor, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(text = text, fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Medium)
     }
