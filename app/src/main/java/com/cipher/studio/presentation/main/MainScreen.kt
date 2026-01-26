@@ -213,7 +213,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 // 3. RIGHT CONTROL PANEL
                 ControlPanel(
                     config = config,
-                    onChange = { /* Update Config in VM */ },
+                    onChange = { viewModel.updateConfig(it) }, // FIXED: Connect to ViewModel
                     isOpen = isControlsOpen,
                     onClose = { isControlsOpen = false },
                     theme = theme
@@ -264,6 +264,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
+// ... (Rest of the file remains unchanged as per instruction) ...
 // --- HEADER (Updated with Logo) ---
 @Composable
 fun GeminiTopBar(
