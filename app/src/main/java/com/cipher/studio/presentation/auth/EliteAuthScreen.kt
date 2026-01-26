@@ -24,7 +24,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.onFocusChanged // FIXED: Added critical import
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -268,7 +268,7 @@ fun EliteAuthScreen(
                                 .scale(buttonScale)
                                 .shadow(
                                     elevation = 15.dp, 
-                                    shape = RoundedCornerShape(12.dp), // FIXED: Explicit shape
+                                    shape = RoundedCornerShape(12.dp),
                                     spotColor = CyberGreen.copy(alpha = 0.4f)
                                 ),
                             shape = RoundedCornerShape(12.dp),
@@ -430,7 +430,7 @@ fun MinimalistTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
-                .onFocusChanged { isFocused = it.isFocused }
+                .onFocusChanged { isFocused = it.isFocused } // FIXED: Using Native Import
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
@@ -503,7 +503,7 @@ fun SystemStatusIndicator(isLoading: Boolean) {
                 .background(if (isLoading) Color(0xFFF59E0B) else CyberGreen.copy(alpha = alpha))
                 .shadow(
                     elevation = 8.dp, 
-                    shape = CircleShape, // FIXED: Explicit shape
+                    shape = CircleShape,
                     spotColor = if (isLoading) Color(0xFFF59E0B) else CyberGreen
                 )
         )
@@ -517,6 +517,3 @@ fun SystemStatusIndicator(isLoading: Boolean) {
         )
     }
 }
-
-// Helper extension for focus
-fun Modifier.onFocusChanged(onFocusChanged: (androidx.compose.ui.focus.FocusState) -> Unit) = androidx.compose.ui.focus.onFocusChanged(onFocusChanged)
