@@ -107,7 +107,6 @@ fun SplashScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        // Use the Custom Logo here too for consistency
         Image(
             painter = painterResource(id = R.drawable.my_logo),
             contentDescription = "Logo",
@@ -129,6 +128,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     val config by viewModel.config.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val currentSessionId by viewModel.currentSessionId.collectAsState()
+    val currentModelName by viewModel.currentModelName.collectAsState()
 
     // UI Controllers
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -194,14 +194,15 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // 1. HEADER (With Real Logo)
+                    // 1. HEADER (UPDATED: With Model Badge)
                     GeminiTopBar(
                         currentView = currentView,
+                        modelName = currentModelName,
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onSettingsClick = { isControlsOpen = true }
                     )
 
-                    // 2. CONTENT AREA (All Modules Included)
+                    // 2. CONTENT AREA
                     Box(modifier = Modifier.weight(1f)) {
                         AnimatedContent(
                             targetState = currentView,
@@ -234,7 +235,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     }
 
-    // REAL DELETE CONFIRMATION DIALOG
+    // DIALOGS
     if (sessionToDelete != null) {
         AlertDialog(
             onDismissRequest = { sessionToDelete = null },
@@ -243,9 +244,8 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        // Action: Call ViewModel to delete
                         sessionToDelete?.let { id ->
-                            viewModel.deleteSession(id) // Ensure this exists in VM
+                            viewModel.deleteSession(id)
                             Toast.makeText(context, "Conversation deleted", Toast.LENGTH_SHORT).show()
                         }
                         sessionToDelete = null
@@ -256,15 +256,12 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { sessionToDelete = null }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { sessionToDelete = null }) { Text("Cancel") }
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         )
     }
 
-    // Settings Dialog
     if (showSettings) {
         SettingsDialog(
             currentKey = null,
@@ -276,10 +273,11 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
-// --- HEADER (Updated with Logo) ---
+// --- HEADER (Updated with Model Badge) ---
 @Composable
 fun GeminiTopBar(
     currentView: ViewMode,
+    modelName: String,
     onMenuClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -290,39 +288,43 @@ fun GeminiTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Menu Button
         IconButton(onClick = onMenuClick) {
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
-        // Title or Logo in Center (Optional, but clean)
-        if (currentView != ViewMode.CHAT) {
+        // CENTER BADGE (Added as requested)
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
             Text(
-                text = currentView.name.replace("_", " "),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                text = if (currentView == ViewMode.CHAT) modelName else currentView.name.replace("_", " "),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
-        // Config Button
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground)
         }
     }
 }
 
-// --- CHAT VIEW ---
+// --- CHAT VIEW (Updated with Suggestions & Spacing) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
     val prompt by viewModel.prompt.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
-
-    // NEW STATES FROM VIEWMODEL
     val isExpanded by viewModel.isInputExpanded.collectAsState()
     val isVoiceActive by viewModel.isVoiceActive.collectAsState()
+    
+    // Suggestion Chips Data
+    val suggestions = viewModel.suggestionChips
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
@@ -332,15 +334,10 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { viewModel.addAttachment(it) } }
 
-    // VOICE PERMISSION LAUNCHER
     val voicePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            viewModel.toggleVoiceInput()
-        } else {
-            Toast.makeText(context, "Permission needed for Voice Input", Toast.LENGTH_SHORT).show()
-        }
+        if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(history.size, isStreaming) {
@@ -351,11 +348,22 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (!isExpanded) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(top = 0.dp, bottom = 140.dp), // Increased padding for floating bar
                 modifier = Modifier.fillMaxSize()
             ) {
                 if (history.isEmpty()) {
                     item { GreetingHeader() }
+                    
+                    // NEW: Suggestion Chips (Filling the Dead Space)
+                    item {
+                        SuggestionGrid(
+                            suggestions = suggestions,
+                            onSuggestionClick = { 
+                                viewModel.updatePrompt(it)
+                                // Optional: Auto-run on click? For now just populate
+                            }
+                        )
+                    }
                 }
 
                 items(history) { message ->
@@ -376,23 +384,23 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // --- NEW SMART DYNAMIC INPUT BAR ---
-        // === FIX APPLIED HERE: REMOVED Float.NaN ===
+        // --- UPDATED INPUT BAR CONTAINER (Edge-to-Edge & Floating) ---
         Box(
             modifier = Modifier
                 .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
-                .ifTrue(isExpanded) { fillMaxHeight() } // The SAFE way to expand
+                .ifTrue(isExpanded) { fillMaxHeight() }
                 .background(
                     if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent
                 )
                 .imePadding() 
         ) {
+            // Gradient only visible when not expanded (to blend floating bar)
             if (!isExpanded) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
+                        .height(120.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             brush = Brush.verticalGradient(
@@ -415,18 +423,14 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 attachmentCount = attachments.size,
                 isExpanded = isExpanded,
                 onExpandToggle = { viewModel.toggleFullscreenInput() },
-
-                // NEW: Voice Logic
                 isVoiceActive = isVoiceActive,
-                onMicClick = { 
-                    voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) 
-                }
+                onMicClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
             )
         }
     }
 }
 
-// --- NEW COMPONENT: SMART INPUT BAR (UPDATED WITH VOICE UI) ---
+// --- UPDATED: SMART INPUT BAR (Shadow, Border, Spacing) ---
 @Composable
 fun GeminiSmartInputBar(
     prompt: String,
@@ -437,14 +441,14 @@ fun GeminiSmartInputBar(
     attachmentCount: Int,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
-    // Voice Params
     isVoiceActive: Boolean,
     onMicClick: () -> Unit
 ) {
-    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 0.5f else 0.9f)
-    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+    // UPDATED: Styling for floating effect
+    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 1f else 0.95f) // More opaque
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+    val shadowElevation = if (isExpanded) 0.dp else 12.dp
 
-    // Pulse Animation for Voice
     val pulseAlpha by rememberInfiniteTransition().animateFloat(
         initialValue = 0.5f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
@@ -455,10 +459,11 @@ fun GeminiSmartInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = if (isExpanded) 0.dp else 12.dp,
-                end = if (isExpanded) 0.dp else 12.dp,
+                // UPDATED: Tighter horizontal padding for edge-to-edge feel
+                start = if (isExpanded) 0.dp else 8.dp, 
+                end = if (isExpanded) 0.dp else 8.dp,
                 bottom = if (isExpanded) 0.dp else 16.dp,
-                top = if (isExpanded) 0.dp else 0.dp
+                top = 0.dp
             )
             .animateContentSize()
     ) {
@@ -480,11 +485,13 @@ fun GeminiSmartInputBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .ifTrue(isExpanded) { fillMaxHeight() } // Safe expansion inside too
-                .shadow(if (isExpanded) 0.dp else 4.dp, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp), spotColor = Color.Black.copy(0.1f))
-                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
+                .ifTrue(isExpanded) { fillMaxHeight() }
+                // UPDATED: Added Shadow for "Floating" effect
+                .shadow(shadowElevation, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp), spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
                 .background(bgColor)
-                .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
+                // UPDATED: Subtle border
+                .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
         ) {
             if (isExpanded) {
                 Row(
@@ -523,9 +530,9 @@ fun GeminiSmartInputBar(
                         Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // UPDATED: Increased Spacing
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                    // MIC BUTTON WITH PULSE ANIMATION
                     IconButton(
                         onClick = onMicClick,
                         modifier = Modifier
@@ -544,7 +551,7 @@ fun GeminiSmartInputBar(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
                 }
 
                 Box(
@@ -585,14 +592,15 @@ fun GeminiSmartInputBar(
                         Icon(Icons.Rounded.Fullscreen, "Expand", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     val isSendEnabled = prompt.isNotBlank() || isStreaming
-                    val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+                    // UPDATED: Distinct Color for Send Button (Green/Primary)
+                    val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
 
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp) // Slightly bigger
                             .clip(CircleShape)
                             .background(btnColor)
                             .clickable(enabled = isSendEnabled) { onSend() },
@@ -615,16 +623,7 @@ fun GeminiSmartInputBar(
     }
 }
 
-// Helper Extension for Conditional Modifier
-fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
-    return if (condition) {
-        then(modifier(Modifier))
-    } else {
-        this
-    }
-}
-
-// --- GREETING (Smart) ---
+// --- GREETING (UPDATED: Typography & Colors) ---
 @Composable
 fun GreetingHeader() {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -634,29 +633,99 @@ fun GreetingHeader() {
         else -> "Good Evening"
     }
 
+    // Custom Pastel Green for better visual hierarchy
+    val pastelGreen = Color(0xFF81C784) 
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 60.dp)
+            .padding(start = 24.dp, end = 24.dp, top = 60.dp, bottom = 20.dp)
     ) {
-        // Use Logo here too for branding
         Image(
             painter = painterResource(id = R.drawable.my_logo),
             contentDescription = null,
-            modifier = Modifier.size(40.dp).padding(bottom = 16.dp)
+            modifier = Modifier.size(48.dp).padding(bottom = 20.dp)
         )
 
+        // UPDATED: Increased Line Height & Pastel Color
         Text(
             text = "$greeting, Creator",
-            style = MaterialTheme.typography.headlineLarge,
+            style = MaterialTheme.typography.headlineMedium.copy(lineHeight = 40.sp),
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+            color = pastelGreen 
         )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
         Text(
             text = "Ready to build something extraordinary?",
             style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
+    }
+}
+
+// --- NEW COMPONENT: SUGGESTION GRID (Fills Dead Space) ---
+@Composable
+fun SuggestionGrid(
+    suggestions: List<String>,
+    onSuggestionClick: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        suggestions.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowItems.forEach { item ->
+                    SuggestionChip(
+                        label = item,
+                        onClick = { onSuggestionClick(item) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SuggestionChip(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(80.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// Helper Extension for Conditional Modifier
+fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
+    return if (condition) {
+        then(modifier(Modifier))
+    } else {
+        this
     }
 }
 
@@ -671,7 +740,7 @@ fun StreamingIndicator() {
     }
 }
 
-// --- SIDEBAR (Complete: All Apps + Logo + About) ---
+// --- SIDEBAR (Unchanged Logic, just ensuring it's here) ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
@@ -691,7 +760,6 @@ fun InternalSidebar(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 1. App Header with CUSTOM LOGO
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
              Image(
                  painter = painterResource(id = R.drawable.my_logo),
@@ -702,7 +770,6 @@ fun InternalSidebar(
              Text("Cipher Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
 
-        // 2. New Chat Button
         Button(
             onClick = onNewSession,
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -717,19 +784,13 @@ fun InternalSidebar(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 3. APPS (ALL MODULES INCLUDED)
         Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Chat
         SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
-
-        // Dev Tools
         SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
         SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
         SidebarItem(Icons.Default.Lightbulb, "Prompt Studio", currentView == ViewMode.PROMPT_STUDIO) { onViewChange(ViewMode.PROMPT_STUDIO) }
-
-        // Missing Apps Added Here
         SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
         SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
         SidebarItem(Icons.Default.Description, "Doc Intel", currentView == ViewMode.DOC_INTEL) { onViewChange(ViewMode.DOC_INTEL) }
@@ -738,7 +799,6 @@ fun InternalSidebar(
         Divider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. HISTORY (With Real Delete Action)
         Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -772,16 +832,12 @@ fun InternalSidebar(
 
         Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 5. Footer (About & Settings)
-
-        // ABOUT LINK (Added as requested)
         Row(modifier = Modifier.clickable { onViewChange(ViewMode.ABOUT) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
             Text("About", color = MaterialTheme.colorScheme.onSurface)
         }
 
-        // SETTINGS LINK
         Row(modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
