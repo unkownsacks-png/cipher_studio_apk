@@ -82,7 +82,7 @@ class VisionHubViewModel @Inject constructor(
     }
 
     /**
-     * NEW: Clear the current image and result (For the 'Remove' button)
+     * Clear the current image and result (For the 'Remove' button)
      */
     fun clearSelection() {
         _selectedImage.value = null
@@ -156,11 +156,10 @@ class VisionHubViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Config specifically for Vision (Uses Flash for speed/multimodal)
+                // FIX: Use ModelName Enum instead of String to avoid type mismatch
                 val config = ModelConfig(
-                    model = "gemini-1.5-flash", // Using string literal or ModelName enum depending on your setup
+                    model = ModelName.FLASH, 
                     temperature = 0.4,
-                    maxOutputTokens = 2048,
                     systemInstruction = systemInfo
                 )
 
@@ -168,7 +167,7 @@ class VisionHubViewModel @Inject constructor(
                     apiKey = apiKey,
                     prompt = prompt,
                     attachments = listOf(image),
-                    history = emptyList(), // Vision usually doesn't need chat history
+                    history = emptyList(), 
                     config = config
                 ).collect { streamResult ->
                     when (streamResult) {
