@@ -2,6 +2,7 @@ package com.cipher.studio.presentation.codelab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cipher.studio.data.local.ApiKeyManager
 import com.cipher.studio.domain.model.Attachment
 import com.cipher.studio.domain.model.ChatMessage
 import com.cipher.studio.domain.model.ChatRole
@@ -23,7 +24,8 @@ enum class CodeLabViewMode {
 
 @HiltViewModel
 class CodeLabViewModel @Inject constructor(
-    private val aiService: GenerativeAIService
+    private val aiService: GenerativeAIService,
+    private val apiKeyManager: ApiKeyManager // FIX 1: Dependency Injection Added
 ) : ViewModel() {
 
     // State
@@ -74,17 +76,22 @@ class CodeLabViewModel @Inject constructor(
             )
 
             // We mimic the chat structure but it's a single-shot request here
-            val history = emptyList<ChatMessage>() // CodeLab doesn't seem to maintain long history in your TS file
-            
-            // NOTE: API Key handling should be centralized. 
-            // Assuming we pass it or the service handles it from a secure repo.
-            // For now, using a placeholder or injected key logic from MainViewModel context if linked.
-            val apiKey = "YOUR_API_KEY_OR_INJECTED_PREFERENCE" 
+            val history = emptyList<ChatMessage>() 
+
+            // FIX 2: Retrieve actual API Key from Manager
+            val apiKey = apiKeyManager.getApiKey()
+
+            // FIX 3: Validate Key
+            if (apiKey.isNullOrBlank()) {
+                _code.value = "<!-- Error: API Key not found. Please add it in Settings. -->"
+                _isGenerating.value = false
+                return@launch
+            }
 
             var accumulatedCode = ""
 
             aiService.generateContentStream(
-                apiKey = apiKey, 
+                apiKey = apiKey, // FIX 4: Pass real key
                 prompt = _prompt.value, 
                 attachments = emptyList(), 
                 history = history, 
