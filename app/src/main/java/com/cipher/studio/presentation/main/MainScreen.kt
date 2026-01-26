@@ -319,7 +319,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val prompt by viewModel.prompt.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
-    
+
     // NEW STATES FROM VIEWMODEL
     val isExpanded by viewModel.isInputExpanded.collectAsState()
     val isVoiceActive by viewModel.isVoiceActive.collectAsState()
@@ -377,11 +377,12 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
 
         // --- NEW SMART DYNAMIC INPUT BAR ---
+        // === FIX APPLIED HERE: REMOVED Float.NaN ===
         Box(
             modifier = Modifier
                 .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(if (isExpanded) 1f else Float.NaN)
+                .ifTrue(isExpanded) { fillMaxHeight() } // The SAFE way to expand
                 .background(
                     if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent
                 )
@@ -414,7 +415,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 attachmentCount = attachments.size,
                 isExpanded = isExpanded,
                 onExpandToggle = { viewModel.toggleFullscreenInput() },
-                
+
                 // NEW: Voice Logic
                 isVoiceActive = isVoiceActive,
                 onMicClick = { 
@@ -479,7 +480,7 @@ fun GeminiSmartInputBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(if (isExpanded) 1f else Float.NaN)
+                .ifTrue(isExpanded) { fillMaxHeight() } // Safe expansion inside too
                 .shadow(if (isExpanded) 0.dp else 4.dp, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp), spotColor = Color.Black.copy(0.1f))
                 .clip(RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
                 .background(bgColor)
@@ -521,9 +522,9 @@ fun GeminiSmartInputBar(
                     ) {
                         Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     // MIC BUTTON WITH PULSE ANIMATION
                     IconButton(
                         onClick = onMicClick,
@@ -576,7 +577,7 @@ fun GeminiSmartInputBar(
 
                 if (!isExpanded) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     IconButton(
                         onClick = onExpandToggle,
                         modifier = Modifier.size(32.dp).padding(bottom = 2.dp)
