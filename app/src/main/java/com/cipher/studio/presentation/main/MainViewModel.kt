@@ -63,12 +63,24 @@ class MainViewModel @Inject constructor(
     private val _isSidebarOpen = MutableStateFlow(false)
     val isSidebarOpen = _isSidebarOpen.asStateFlow()
 
-    // --- Advanced UI States (NEW) ---
+    // --- Advanced UI States (NEW & UPDATED) ---
     private val _isVoiceActive = MutableStateFlow(false)
     val isVoiceActive = _isVoiceActive.asStateFlow()
 
     private val _isInputExpanded = MutableStateFlow(false)
     val isInputExpanded = _isInputExpanded.asStateFlow()
+
+    // NEW: Model Name for Top Bar Badge
+    private val _currentModelName = MutableStateFlow("Cipher 1.0 Ultra") 
+    val currentModelName = _currentModelName.asStateFlow()
+
+    // NEW: Suggestion Chips Data
+    val suggestionChips = listOf(
+        "Generate Kotlin Code for MVVM",
+        "Analyze this UI Layout",
+        "Debug my crash log",
+        "Write a creative story"
+    )
 
     // --- Session & Config ---
     private val _sessions = MutableStateFlow<List<Session>>(emptyList())
@@ -117,14 +129,12 @@ class MainViewModel @Inject constructor(
 
                     override fun onError(error: Int) {
                         _isVoiceActive.value = false
-                        // Optional: Handle specific error codes here
                     }
 
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         if (!matches.isNullOrEmpty()) {
                             val spokenText = matches[0]
-                            // Append to existing text smartly
                             val currentText = _prompt.value
                             _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
                         }
@@ -137,13 +147,12 @@ class MainViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fail silently, don't crash app
         }
     }
 
     fun toggleVoiceInput() {
         if (speechRecognizer == null) {
-            initSpeechRecognizer() // Try again if failed first time
+            initSpeechRecognizer()
         }
 
         if (_isVoiceActive.value) {
@@ -177,7 +186,9 @@ class MainViewModel @Inject constructor(
     // --- CONFIGURATION LINK ---
     fun updateConfig(newConfig: ModelConfig) {
         _config.value = newConfig
-        saveSessionsToDisk() // Persist changes immediately
+        // Update model name based on config if needed
+        _currentModelName.value = if(newConfig.modelName.contains("gemini")) "Gemini Pro" else "Cipher Ultra"
+        saveSessionsToDisk()
     }
 
     // --- SESSION MANAGEMENT ---
@@ -199,7 +210,7 @@ class MainViewModel @Inject constructor(
         _history.value = session.history
         _config.value = session.config
         _isSidebarOpen.value = false
-        _isInputExpanded.value = false // Reset expanded view on switch
+        _isInputExpanded.value = false 
     }
 
     fun deleteSession(sessionId: String) {
@@ -222,7 +233,7 @@ class MainViewModel @Inject constructor(
             val updatedList = _sessions.value.map { 
                 if (it.id == currentId) it.copy(
                     history = _history.value, 
-                    config = _config.value, // Save current config
+                    config = _config.value, 
                     lastModified = System.currentTimeMillis()
                 ) 
                 else it 
@@ -245,7 +256,6 @@ class MainViewModel @Inject constructor(
             return
         }
 
-        // Create User Message
         val userMsg = ChatMessage(
             id = UUID.randomUUID().toString(),
             role = ChatRole.USER,
@@ -257,14 +267,12 @@ class MainViewModel @Inject constructor(
         val currentHistory = _history.value + userMsg
         _history.value = currentHistory
 
-        // Clear inputs
         if (overridePrompt == null) {
             _prompt.value = ""
             clearAttachments()
         }
         _isStreaming.value = true
 
-        // Update Title if it's the first message
         if (currentHistory.size == 1) {
             val title = textToRun.take(30) + "..."
             val currentId = _currentSessionId.value
@@ -273,7 +281,6 @@ class MainViewModel @Inject constructor(
             }
         }
 
-        // Add Placeholder for AI Response
         val modelMsgId = UUID.randomUUID().toString()
         val placeholderMsg = ChatMessage(modelMsgId, ChatRole.MODEL, "", System.currentTimeMillis())
         _history.value = currentHistory + placeholderMsg
@@ -283,7 +290,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             var fullResponse = ""
 
-            // USE CURRENT CONFIG (Fix for model switching)
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = userMsg.text,
@@ -310,7 +316,6 @@ class MainViewModel @Inject constructor(
     }
 
     // --- HELPER FUNCTIONS ---
-
     private fun updateLastMessage(newText: String) {
         val list = _history.value.toMutableList()
         if (list.isNotEmpty()) {
@@ -363,7 +368,6 @@ class MainViewModel @Inject constructor(
         saveSessionsToDisk()
     }
 
-    // --- CLEANUP ---
     override fun onCleared() {
         super.onCleared()
         tts?.stop()
