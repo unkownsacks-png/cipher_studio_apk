@@ -7,7 +7,7 @@ import android.net.Uri
 import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cipher.studio.data.local.ApiKeyManager // IMPORT ADDED
+import com.cipher.studio.data.local.ApiKeyManager
 import com.cipher.studio.domain.model.*
 import com.cipher.studio.domain.service.GenerativeAIService
 import com.cipher.studio.domain.service.StreamResult
@@ -21,15 +21,16 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import javax.inject.Inject
 
+// --- EXPANDED VISION MODES ---
 enum class VisionMode {
     DESCRIBE, EXTRACT, ANALYZE, CODE, THREAT,
-    // --- NEW ADVANCED FEATURES ---
+    // New Advanced Features
     UI_AUDIT,       // Criticize App/Web UI Designs
     MATH_SOLVER,    // Solve handwritten math problems
-    GEOLOCATE,      // OSINT: Guess location from visual cues
-    NUTRITION,      // Estimate calories/macros from food photos
-    DIAGNOSIS,      // Identify plant diseases or machinery faults
-    SHOPPING,       // Identify products/brands
+    GEOLOCATE,      // OSINT: Guess location
+    NUTRITION,      // Estimate calories/macros
+    DIAGNOSIS,      // Identify plant/machinery issues
+    SHOPPING,       // Identify products
     HANDWRITING     // Digitize handwritten notes
 }
 
@@ -37,10 +38,10 @@ enum class VisionMode {
 class VisionHubViewModel @Inject constructor(
     private val aiService: GenerativeAIService,
     @ApplicationContext private val context: Context,
-    private val apiKeyManager: ApiKeyManager // FIX 1: Dependency Injection
+    private val apiKeyManager: ApiKeyManager
 ) : ViewModel() {
 
-    // State
+    // State Holders
     private val _selectedImage = MutableStateFlow<Attachment?>(null)
     val selectedImage = _selectedImage.asStateFlow()
 
@@ -50,7 +51,9 @@ class VisionHubViewModel @Inject constructor(
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing = _isAnalyzing.asStateFlow()
 
-    // Helper: Handle URI selection from Gallery
+    /**
+     * Helper: Handle URI selection from Gallery & Compress Image
+     */
     fun onImageSelected(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -60,7 +63,7 @@ class VisionHubViewModel @Inject constructor(
 
                 if (bitmap != null) {
                     val outputStream = ByteArrayOutputStream()
-                    // Compress to JPEG to save size, quality 80
+                    // Compress to JPEG, quality 80 to save tokens/bandwidth
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
                     val byteArray = outputStream.toByteArray()
                     val base64String = Base64.encodeToString(byteArray, Base64.NO_WRAP)
@@ -78,6 +81,18 @@ class VisionHubViewModel @Inject constructor(
         }
     }
 
+    /**
+     * NEW: Clear the current image and result (For the 'Remove' button)
+     */
+    fun clearSelection() {
+        _selectedImage.value = null
+        _result.value = ""
+        _isAnalyzing.value = false
+    }
+
+    /**
+     * Main Analysis Logic with Expanded Prompts
+     */
     fun analyzeImage(mode: VisionMode) {
         val image = _selectedImage.value ?: return
         if (_isAnalyzing.value) return
@@ -85,12 +100,12 @@ class VisionHubViewModel @Inject constructor(
         _isAnalyzing.value = true
         _result.value = ""
 
-        // FIX 2: Retrieve API Key
+        // Get API Key securely
         val apiKey = apiKeyManager.getApiKey()
 
-        // FIX 3: Validate Key
+        // Validate API Key
         if (apiKey.isNullOrBlank()) {
-            _result.value = "⚠️ ACCESS DENIED: API Key not found. Please navigate to Settings and configure your Gemini API Key to unlock Vision Hub."
+            _result.value = "⚠️ ACCESS DENIED: API Key not found. Please navigate to Settings and configure your Gemini API Key."
             _isAnalyzing.value = false
             return
         }
@@ -98,17 +113,18 @@ class VisionHubViewModel @Inject constructor(
         var prompt = ""
         var systemInfo = "You are an expert Computer Vision assistant."
 
-        // Enhanced Prompts for Advanced Features
+        // --- PROMPT ENGINEERING FOR ALL MODES ---
         when (mode) {
             VisionMode.DESCRIBE -> prompt = "Describe this image in vivid detail. What is happening?"
             VisionMode.EXTRACT -> prompt = "Extract all visible text from this image exactly as it appears. Format it cleanly."
             VisionMode.ANALYZE -> prompt = "Analyze this image professionally. Identify objects, artistic style, colors, and potential context."
             VisionMode.CODE -> prompt = "Extract the code from this image. Return ONLY the valid code block, formatted correctly for the detected language."
             VisionMode.THREAT -> {
-                prompt = "Perform a SECURITY AUDIT on this image. Identify: 1. Phishing indicators (URL mismatches, fake logos). 2. Sensitive data exposure (PII, Credentials). 3. Physical security risks. Format as a Threat Report."
+                prompt = "Perform a SECURITY AUDIT on this image. Identify: 1. Phishing indicators. 2. Sensitive data exposure (PII, Credentials). 3. Physical security risks. Format as a Threat Report."
                 systemInfo = "You are a Cyber Security Image Analyst."
             }
-            // --- NEW FEATURES ---
+            
+            // --- NEW FEATURES PROMPTS ---
             VisionMode.UI_AUDIT -> {
                 prompt = "Act as a Senior UX/UI Designer. Audit this interface screenshot. Critique: 1. Accessibility (Color Contrast). 2. Layout & Spacing. 3. User Flow issues. Provide actionable improvements."
                 systemInfo = "You are a Product Designer specializing in Accessibility and UX."
@@ -130,41 +146,47 @@ class VisionHubViewModel @Inject constructor(
                 systemInfo = "You are an expert Diagnostician."
             }
             VisionMode.SHOPPING -> {
-                prompt = "Identify the main products (Fashion, Furniture, Electronics) in this image. List the potential Brand, Model, and style name to help me find it online."
+                prompt = "Identify the main products (Fashion, Furniture, Electronics) in this image. List the potential Brand, Model, and style name."
                 systemInfo = "You are a Personal Shopper and Stylist."
             }
             VisionMode.HANDWRITING -> {
-                prompt = "Transcribe this handwritten note into clean, formatted digital text (Markdown). Fix minor spelling errors if obvious, but keep the original meaning."
+                prompt = "Transcribe this handwritten note into clean, formatted digital text (Markdown). Fix minor spelling errors if obvious."
             }
         }
 
         viewModelScope.launch {
-            val config = ModelConfig(
-                model = ModelName.FLASH, // Always use Pro for vision tasks
-                temperature = 0.4,
-                systemInstruction = systemInfo
-            )
+            try {
+                // Config specifically for Vision (Uses Flash for speed/multimodal)
+                val config = ModelConfig(
+                    model = "gemini-1.5-flash", // Using string literal or ModelName enum depending on your setup
+                    temperature = 0.4,
+                    maxOutputTokens = 2048,
+                    systemInstruction = systemInfo
+                )
 
-            // FIX 4: Use validated apiKey
-            aiService.generateContentStream(
-                apiKey = apiKey,
-                prompt = prompt,
-                attachments = listOf(image),
-                history = emptyList(), 
-                config = config
-            ).collect { streamResult ->
-                when (streamResult) {
-                    is StreamResult.Content -> {
-                        _result.value += streamResult.text
+                aiService.generateContentStream(
+                    apiKey = apiKey,
+                    prompt = prompt,
+                    attachments = listOf(image),
+                    history = emptyList(), // Vision usually doesn't need chat history
+                    config = config
+                ).collect { streamResult ->
+                    when (streamResult) {
+                        is StreamResult.Content -> {
+                            _result.value += streamResult.text
+                        }
+                        is StreamResult.Error -> {
+                            _result.value += "\n\n**Error:** ${streamResult.message}"
+                            _isAnalyzing.value = false
+                        }
+                        is StreamResult.Metadata -> { /* Ignore */ }
                     }
-                    is StreamResult.Error -> {
-                        _result.value += "\n\nError: ${streamResult.message}"
-                        _isAnalyzing.value = false
-                    }
-                    is StreamResult.Metadata -> { /* Ignore */ }
                 }
+            } catch (e: Exception) {
+                _result.value = "Error: ${e.localizedMessage}"
+            } finally {
+                _isAnalyzing.value = false
             }
-            _isAnalyzing.value = false
         }
     }
 }
