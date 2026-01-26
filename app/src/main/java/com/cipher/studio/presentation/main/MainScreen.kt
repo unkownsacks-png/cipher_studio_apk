@@ -73,6 +73,7 @@ import com.cipher.studio.presentation.visionhub.VisionHubScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlin.random.Random
 
 @Composable
 fun MainScreen(
@@ -194,7 +195,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // 1. HEADER (UPDATED: With Model Badge)
+                    // 1. HEADER (With Model Badge)
                     GeminiTopBar(
                         currentView = currentView,
                         modelName = currentModelName,
@@ -292,7 +293,6 @@ fun GeminiTopBar(
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
-        // CENTER BADGE (Added as requested)
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
@@ -323,7 +323,6 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val isExpanded by viewModel.isInputExpanded.collectAsState()
     val isVoiceActive by viewModel.isVoiceActive.collectAsState()
     
-    // Suggestion Chips Data
     val suggestions = viewModel.suggestionChips
 
     val listState = rememberLazyListState()
@@ -348,20 +347,15 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (!isExpanded) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(top = 0.dp, bottom = 140.dp), // Increased padding for floating bar
+                contentPadding = PaddingValues(top = 0.dp, bottom = 140.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 if (history.isEmpty()) {
                     item { GreetingHeader() }
-                    
-                    // NEW: Suggestion Chips (Filling the Dead Space)
                     item {
                         SuggestionGrid(
                             suggestions = suggestions,
-                            onSuggestionClick = { 
-                                viewModel.updatePrompt(it)
-                                // Optional: Auto-run on click? For now just populate
-                            }
+                            onSuggestionClick = { viewModel.updatePrompt(it) }
                         )
                     }
                 }
@@ -384,7 +378,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // --- UPDATED INPUT BAR CONTAINER (Edge-to-Edge & Floating) ---
+        // --- UPDATED INPUT BAR CONTAINER ---
         Box(
             modifier = Modifier
                 .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
@@ -395,7 +389,6 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 )
                 .imePadding() 
         ) {
-            // Gradient only visible when not expanded (to blend floating bar)
             if (!isExpanded) {
                 Box(
                     modifier = Modifier
@@ -430,7 +423,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     }
 }
 
-// --- UPDATED: SMART INPUT BAR (Shadow, Border, Spacing) ---
+// --- UPDATED: SMART INPUT BAR (With Waveform & Typewriter) ---
 @Composable
 fun GeminiSmartInputBar(
     prompt: String,
@@ -444,22 +437,14 @@ fun GeminiSmartInputBar(
     isVoiceActive: Boolean,
     onMicClick: () -> Unit
 ) {
-    // UPDATED: Styling for floating effect
-    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 1f else 0.95f) // More opaque
+    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 1f else 0.95f)
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
     val shadowElevation = if (isExpanded) 0.dp else 12.dp
-
-    val pulseAlpha by rememberInfiniteTransition().animateFloat(
-        initialValue = 0.5f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
-        label = "pulse"
-    )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                // UPDATED: Tighter horizontal padding for edge-to-edge feel
                 start = if (isExpanded) 0.dp else 8.dp, 
                 end = if (isExpanded) 0.dp else 8.dp,
                 bottom = if (isExpanded) 0.dp else 16.dp,
@@ -486,11 +471,9 @@ fun GeminiSmartInputBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .ifTrue(isExpanded) { fillMaxHeight() }
-                // UPDATED: Added Shadow for "Floating" effect
                 .shadow(shadowElevation, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp), spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                 .clip(RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
                 .background(bgColor)
-                // UPDATED: Subtle border
                 .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
         ) {
             if (isExpanded) {
@@ -530,25 +513,33 @@ fun GeminiSmartInputBar(
                         Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
 
-                    // UPDATED: Increased Spacing
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    IconButton(
-                        onClick = onMicClick,
+                    // MIC / WAVEFORM BUTTON
+                    Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .height(36.dp)
+                            // Width expands when active to show waveform
+                            .width(if (isVoiceActive) 80.dp else 36.dp)
+                            .clip(CircleShape)
                             .background(
-                                if (isVoiceActive) MaterialTheme.colorScheme.error.copy(alpha = pulseAlpha) else MaterialTheme.colorScheme.background, 
-                                CircleShape
+                                if (isVoiceActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.background
                             )
-                            .border(1.dp, if(isVoiceActive) Color.Transparent else borderColor, CircleShape)
+                            .border(1.dp, if(isVoiceActive) MaterialTheme.colorScheme.error else borderColor, CircleShape)
+                            .clickable { onMicClick() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            if(isVoiceActive) Icons.Rounded.Stop else Icons.Rounded.Mic, 
-                            "Voice", 
-                            tint = if (isVoiceActive) Color.White else MaterialTheme.colorScheme.onSurface, 
-                            modifier = Modifier.size(20.dp)
-                        )
+                        if (isVoiceActive) {
+                            // FEATURE 1: VOICE WAVEFORM
+                            VoiceWaveform()
+                        } else {
+                            Icon(
+                                Icons.Rounded.Mic, 
+                                "Voice", 
+                                tint = MaterialTheme.colorScheme.onSurface, 
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
@@ -560,13 +551,17 @@ fun GeminiSmartInputBar(
                         .padding(vertical = if (isExpanded) 0.dp else 6.dp)
                         .heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 120.dp)
                 ) {
-                    if (prompt.isEmpty()) {
+                    if (prompt.isEmpty() && !isVoiceActive) {
+                        // FEATURE 3: TYPEWRITER PLACEHOLDER
+                        TypewriterPlaceholder(isExpanded)
+                    } else if (prompt.isEmpty() && isVoiceActive) {
                         Text(
-                            if (isExpanded) "Start coding or writing..." else if (isVoiceActive) "Listening..." else "Message Cipher...",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            "Listening...",
+                            color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
+                    
                     BasicTextField(
                         value = prompt,
                         onValueChange = onPromptChange,
@@ -595,12 +590,11 @@ fun GeminiSmartInputBar(
                     Spacer(modifier = Modifier.width(12.dp))
 
                     val isSendEnabled = prompt.isNotBlank() || isStreaming
-                    // UPDATED: Distinct Color for Send Button (Green/Primary)
                     val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
 
                     Box(
                         modifier = Modifier
-                            .size(44.dp) // Slightly bigger
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(btnColor)
                             .clickable(enabled = isSendEnabled) { onSend() },
@@ -623,7 +617,83 @@ fun GeminiSmartInputBar(
     }
 }
 
-// --- GREETING (UPDATED: Typography & Colors) ---
+// --- FEATURE 1 IMPLEMENTATION: VOICE WAVEFORM ---
+@Composable
+fun VoiceWaveform() {
+    val infiniteTransition = rememberInfiniteTransition(label = "wave")
+    
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        repeat(5) { index ->
+            val height by infiniteTransition.animateFloat(
+                initialValue = 10f,
+                targetValue = 24f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(300, delayMillis = index * 50, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "bar$index"
+            )
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(height.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.error)
+            )
+        }
+    }
+}
+
+// --- FEATURE 3 IMPLEMENTATION: TYPEWRITER PLACEHOLDER ---
+@Composable
+fun TypewriterPlaceholder(isExpanded: Boolean) {
+    val hints = listOf(
+        "Ask Cipher to code...",
+        "Write a creative story...",
+        "Debug my application...",
+        "Explain Quantum Physics...",
+        "Generate a business plan..."
+    )
+    
+    var displayedText by remember { mutableStateOf("") }
+    var hintIndex by remember { mutableIntStateOf(0) }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            val targetText = hints[hintIndex]
+            
+            // Type out
+            for (i in 1..targetText.length) {
+                displayedText = targetText.take(i)
+                delay(50)
+            }
+            
+            delay(2000) // Wait
+            
+            // Delete
+            for (i in targetText.length downTo 0) {
+                displayedText = targetText.take(i)
+                delay(30)
+            }
+            
+            delay(500)
+            hintIndex = (hintIndex + 1) % hints.size
+        }
+    }
+
+    Text(
+        text = if (isExpanded) "Start coding or writing..." else displayedText,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        style = MaterialTheme.typography.bodyLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+// --- GREETING ---
 @Composable
 fun GreetingHeader() {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -633,7 +703,6 @@ fun GreetingHeader() {
         else -> "Good Evening"
     }
 
-    // Custom Pastel Green for better visual hierarchy
     val pastelGreen = Color(0xFF81C784) 
 
     Column(
@@ -647,7 +716,6 @@ fun GreetingHeader() {
             modifier = Modifier.size(48.dp).padding(bottom = 20.dp)
         )
 
-        // UPDATED: Increased Line Height & Pastel Color
         Text(
             text = "$greeting, Creator",
             style = MaterialTheme.typography.headlineMedium.copy(lineHeight = 40.sp),
@@ -665,7 +733,7 @@ fun GreetingHeader() {
     }
 }
 
-// --- NEW COMPONENT: SUGGESTION GRID (Fills Dead Space) ---
+// --- SUGGESTION GRID ---
 @Composable
 fun SuggestionGrid(
     suggestions: List<String>,
@@ -720,7 +788,7 @@ fun SuggestionChip(
     }
 }
 
-// Helper Extension for Conditional Modifier
+// Helper Extension
 fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
     return if (condition) {
         then(modifier(Modifier))
@@ -740,7 +808,7 @@ fun StreamingIndicator() {
     }
 }
 
-// --- SIDEBAR (Unchanged Logic, just ensuring it's here) ---
+// --- SIDEBAR ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InternalSidebar(
