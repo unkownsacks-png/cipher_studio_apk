@@ -59,7 +59,7 @@ fun EliteAuthScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current // FIX: Correct Haptic
+    val haptic = LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
     // ViewModel State
@@ -77,7 +77,7 @@ fun EliteAuthScreen(
     
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Haptic on Error
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             // Shake Effect
             for (i in 0..3) {
                 shakeOffset.animateTo(10f, animationSpec = tween(50))
@@ -166,17 +166,16 @@ fun EliteAuthScreen(
                         visible = startAnimation,
                         enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { -40 }
                     ) {
-                        // FEATURE: Neon Glow Layer
+                        // FEATURE: Neon Glow Layer (FIXED SHADOW)
                         Box(
                             modifier = Modifier
                                 .size(100.dp)
-                                .graphicsLayer {
-                                    shadowElevation = 40.dp.toPx()
-                                    spotShadowColor = CyberGreen
-                                    ambientShadowColor = CyberGreen
-                                    shape = CircleShape
-                                    clip = false 
-                                },
+                                .shadow(
+                                    elevation = 25.dp, 
+                                    shape = CircleShape, 
+                                    spotColor = CyberGreen,
+                                    ambientColor = CyberGreen
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             CipherExactLogo(modifier = Modifier.fillMaxSize())
@@ -259,7 +258,7 @@ fun EliteAuthScreen(
                         
                         Button(
                             onClick = { 
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress) // FIX: Correct Haptic
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.handleAccess() 
                             },
                             enabled = !isLoading,
@@ -267,7 +266,11 @@ fun EliteAuthScreen(
                                 .fillMaxWidth()
                                 .height(52.dp)
                                 .scale(buttonScale)
-                                .shadow(15.dp, CyberGreen.copy(alpha = 0.4f)),
+                                .shadow(
+                                    elevation = 15.dp, 
+                                    shape = RoundedCornerShape(12.dp), // FIXED: Explicit shape
+                                    spotColor = CyberGreen.copy(alpha = 0.4f)
+                                ),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = CyberGreen,
@@ -498,7 +501,11 @@ fun SystemStatusIndicator(isLoading: Boolean) {
                 .size(8.dp)
                 .clip(CircleShape)
                 .background(if (isLoading) Color(0xFFF59E0B) else CyberGreen.copy(alpha = alpha))
-                .shadow(8.dp, if (isLoading) Color(0xFFF59E0B) else CyberGreen)
+                .shadow(
+                    elevation = 8.dp, 
+                    shape = CircleShape, // FIXED: Explicit shape
+                    spotColor = if (isLoading) Color(0xFFF59E0B) else CyberGreen
+                )
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
@@ -510,3 +517,6 @@ fun SystemStatusIndicator(isLoading: Boolean) {
         )
     }
 }
+
+// Helper extension for focus
+fun Modifier.onFocusChanged(onFocusChanged: (androidx.compose.ui.focus.FocusState) -> Unit) = androidx.compose.ui.focus.onFocusChanged(onFocusChanged)
