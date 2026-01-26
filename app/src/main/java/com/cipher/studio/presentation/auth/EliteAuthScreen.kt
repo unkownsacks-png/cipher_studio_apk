@@ -2,8 +2,8 @@ package com.cipher.studio.presentation.auth
 
 import android.content.Intent
 import android.net.Uri
-import android.view.HapticFeedbackConstants
 import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -11,6 +11,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,13 +22,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -35,12 +43,13 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
+import kotlin.random.Random
 
 // --- ELITE THEME COLORS ---
 val DeepSpaceBlack = Color(0xFF020617)
 val CyberGreen = Color(0xFF10b981)
 val CyberGreenGlow = Color(0xFF34d399)
-val GlassSurface = Color(0xFF0F172A).copy(alpha = 0.7f) // More transparent for glass effect
+val GlassSurface = Color(0xFF0F172A).copy(alpha = 0.7f)
 val TextPrimary = Color(0xFFF1F5F9)
 val TextSecondary = Color(0xFF64748B)
 
@@ -50,8 +59,9 @@ fun EliteAuthScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val view = LocalView.current // For Haptics
-    
+    val haptic = LocalHapticFeedback.current // FIX: Correct Haptic
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     // ViewModel State
     val email by viewModel.email.collectAsState()
     val key by viewModel.key.collectAsState()
@@ -62,19 +72,30 @@ fun EliteAuthScreen(
     // Animation States
     var startAnimation by remember { mutableStateOf(false) }
     
+    // FEATURE: Error Shake Animation
+    val shakeOffset = remember { Animatable(0f) }
+    
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Haptic on Error
+            // Shake Effect
+            for (i in 0..3) {
+                shakeOffset.animateTo(10f, animationSpec = tween(50))
+                shakeOffset.animateTo(-10f, animationSpec = tween(50))
+            }
+            shakeOffset.animateTo(0f)
+            
+            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
+        }
+    }
+
     LaunchedEffect(Unit) {
         startAnimation = true
     }
 
     LaunchedEffect(isLoginSuccess) {
         if (isLoginSuccess) onLoginSuccess()
-    }
-
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.clearError()
-        }
     }
 
     // 2. ALIVE NEBULA BACKGROUND
@@ -92,7 +113,6 @@ fun EliteAuthScreen(
     ) {
         // Dynamic Background Canvas
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Moving Green Nebula
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color(0xFF064e3b).copy(alpha = 0.4f), Color.Transparent),
@@ -100,7 +120,6 @@ fun EliteAuthScreen(
                     radius = size.width * 0.9f
                 )
             )
-            // Bottom Blue/Purple hint
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color(0xFF1e1b4b).copy(alpha = 0.3f), Color.Transparent),
@@ -115,7 +134,8 @@ fun EliteAuthScreen(
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(24.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .offset(x = shakeOffset.value.dp), // Apply Shake
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 3. FROSTED GLASS CARD
@@ -146,11 +166,17 @@ fun EliteAuthScreen(
                         visible = startAnimation,
                         enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { -40 }
                     ) {
-                        // 1. VECTOR PERFECT LOGO & 5. NEON GLOW
+                        // FEATURE: Neon Glow Layer
                         Box(
                             modifier = Modifier
                                 .size(100.dp)
-                                .shadow(25.dp, CyberGreen, spotColor = CyberGreen),
+                                .graphicsLayer {
+                                    shadowElevation = 40.dp.toPx()
+                                    spotShadowColor = CyberGreen
+                                    ambientShadowColor = CyberGreen
+                                    shape = CircleShape
+                                    clip = false 
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             CipherExactLogo(modifier = Modifier.fillMaxSize())
@@ -187,12 +213,22 @@ fun EliteAuthScreen(
                         visible = startAnimation,
                         enter = fadeIn(tween(800, delayMillis = 500)) + slideInVertically(tween(800)) { 40 }
                     ) {
+                        val emailFocusRequester = remember { FocusRequester() }
+                        
+                        // FEATURE: Auto-Focus
+                        LaunchedEffect(Unit) {
+                            delay(600) // Wait for enter animation
+                            emailFocusRequester.requestFocus()
+                        }
+
                         Column {
                             MinimalistTextField(
                                 value = email,
                                 onValueChange = viewModel::onEmailChange,
                                 label = "IDENTITY (EMAIL)",
-                                keyboardType = KeyboardType.Email
+                                keyboardType = KeyboardType.Email,
+                                focusRequester = emailFocusRequester,
+                                imeAction = ImeAction.Next
                             )
                             
                             Spacer(modifier = Modifier.height(24.dp))
@@ -202,7 +238,12 @@ fun EliteAuthScreen(
                                 onValueChange = viewModel::onKeyChange,
                                 label = "LICENSE KEY",
                                 keyboardType = KeyboardType.Password,
-                                isPassword = true
+                                isPassword = true,
+                                imeAction = ImeAction.Done,
+                                onAction = { // FEATURE: Fast Access
+                                    keyboardController?.hide()
+                                    viewModel.handleAccess()
+                                }
                             )
                         }
                     }
@@ -218,7 +259,7 @@ fun EliteAuthScreen(
                         
                         Button(
                             onClick = { 
-                                view.performHapticFeedback(HapticFeedbackType.CONFIRM) // Haptic
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress) // FIX: Correct Haptic
                                 viewModel.handleAccess() 
                             },
                             enabled = !isLoading,
@@ -293,11 +334,8 @@ fun EliteAuthScreen(
 @Composable
 fun CipherExactLogo(modifier: Modifier) {
     Canvas(modifier = modifier) {
-        // Coordinate scaling based on the original 100x100 grid concept
         val scale = size.minDimension / 100f
         
-        // Translating the raw XML data you provided:
-        // M 75 25 L 35 25 L 15 50 L 35 75 L 75 75 -> The Shield
         val shieldPath = Path().apply {
             moveTo(75f * scale, 25f * scale)
             lineTo(35f * scale, 25f * scale)
@@ -306,19 +344,12 @@ fun CipherExactLogo(modifier: Modifier) {
             lineTo(75f * scale, 75f * scale)
         }
 
-        // Draw Shield
         drawPath(
             path = shieldPath,
             color = CyberGreen,
-            style = Stroke(
-                width = 6f * scale,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
+            style = Stroke(width = 6f * scale, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
-        // M 30,50 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0 -> The Eye/Circle
-        // In XML: center is approx (40, 50) radius 10
         drawCircle(
             color = CyberGreen,
             center = Offset(40f * scale, 50f * scale),
@@ -326,7 +357,6 @@ fun CipherExactLogo(modifier: Modifier) {
             style = Stroke(width = 6f * scale)
         )
 
-        // M 50 50 L 85 50 -> Horizontal Key Line
         drawLine(
             color = CyberGreen,
             start = Offset(50f * scale, 50f * scale),
@@ -335,7 +365,6 @@ fun CipherExactLogo(modifier: Modifier) {
             cap = StrokeCap.Round
         )
 
-        // M 68 50 L 68 62 -> Tooth 1
         drawLine(
             color = CyberGreen,
             start = Offset(68f * scale, 50f * scale),
@@ -344,7 +373,6 @@ fun CipherExactLogo(modifier: Modifier) {
             cap = StrokeCap.Round
         )
 
-        // M 78 50 L 78 58 -> Tooth 2
         drawLine(
             color = CyberGreen,
             start = Offset(78f * scale, 50f * scale),
@@ -361,11 +389,13 @@ fun MinimalistTextField(
     onValueChange: (String) -> Unit,
     label: String,
     keyboardType: KeyboardType,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    focusRequester: FocusRequester? = null,
+    imeAction: ImeAction = ImeAction.Next,
+    onAction: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
-    // 6. MINIMALIST INPUT DESIGN (Underline only, glow on focus)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -384,18 +414,26 @@ fun MinimalistTextField(
                 fontSize = 16.sp,
                 fontFamily = FontFamily.Monospace
             ),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = imeAction
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { onAction?.invoke() },
+                onGo = { onAction?.invoke() }
+            ),
             visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
-                .onFocusChanged { isFocused = it.isFocused },
+                .onFocusChanged { isFocused = it.isFocused }
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty() && !isFocused) {
                         Text(
-                            text = "...", // Subtle placeholder
+                            text = "...", 
                             color = TextSecondary.copy(alpha = 0.3f)
                         )
                     }
@@ -404,7 +442,6 @@ fun MinimalistTextField(
             }
         )
         
-        // Animated Bottom Line
         val lineWidth by animateFloatAsState(targetValue = if (isFocused) 1f else 0.3f, label = "line")
         val lineColor = if (isFocused) CyberGreen else TextSecondary.copy(alpha = 0.3f)
         
@@ -425,9 +462,7 @@ fun DecryptionText(targetText: String, modifier: Modifier = Modifier, visible: B
 
     LaunchedEffect(visible) {
         if (visible) {
-            // Simple decryption effect
             for (i in 1..targetText.length) {
-                // Scramble phase
                 repeat(3) {
                     displayText = targetText.take(i - 1) + characters.random()
                     delay(50)
@@ -475,6 +510,3 @@ fun SystemStatusIndicator(isLoading: Boolean) {
         )
     }
 }
-
-// Helper extension for focus
-fun Modifier.onFocusChanged(onFocusChanged: (androidx.compose.ui.focus.FocusState) -> Unit) = androidx.compose.ui.focus.onFocusChanged(onFocusChanged)
