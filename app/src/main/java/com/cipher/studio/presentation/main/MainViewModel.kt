@@ -108,20 +108,24 @@ class MainViewModel @Inject constructor(
         _isSidebarOpen.value = false
     }
 
-    // --- NEW FIX: Added deleteSession Function ---
+    // --- NEW FIX: Configuration Logic ---
+    // ControlPanel ላይ ለውጥ ሲደረግ ይህ ፈንክሽን ይጠራል
+    fun updateConfig(newConfig: ModelConfig) {
+        _config.value = newConfig
+        // አዲሱን መቼት (Config) አሁን ወዳለው ሴሽን ላይ መዝግብ
+        saveSessionsToDisk()
+    }
+
+    // --- EXISTING FIX: Added deleteSession Function ---
     fun deleteSession(sessionId: String) {
-        // 1. ዝርዝሩ ውስጥ ያለውን ሴሽን አጥፋ
         val updatedList = _sessions.value.filter { it.id != sessionId }
         _sessions.value = updatedList
         storageManager.saveSessions(updatedList)
 
-        // 2. የተሰረዘው ሴሽን አሁን እየተጠቀምንበት የነበረው ከሆነ፣ ወደ ሌላ መቀየር አለብን
         if (_currentSessionId.value == sessionId) {
             if (updatedList.isNotEmpty()) {
-                // ሌላ ካለ የመጀመሪያውን ክፈት
                 loadSession(updatedList.first())
             } else {
-                // ሁሉም ከተሰረዙ አዲስ ባዶ ክፈት
                 createNewSession()
             }
         }
@@ -139,7 +143,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // --- Image Handling (Fix for Point 4) ---
+    // --- Image Handling ---
     fun addAttachment(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -149,7 +153,6 @@ class MainViewModel @Inject constructor(
 
                 if (bitmap != null) {
                     val outputStream = ByteArrayOutputStream()
-                    // Compress image to avoid hitting token limits or memory issues
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
                     val byteArray = outputStream.toByteArray()
                     val base64String = Base64.encodeToString(byteArray, Base64.NO_WRAP)
@@ -193,10 +196,9 @@ class MainViewModel @Inject constructor(
         val currentHistory = _history.value + userMsg
         _history.value = currentHistory
 
-        // Reset Inputs
         if (overridePrompt == null) {
             _prompt.value = ""
-            clearAttachments() // Clear images after sending
+            clearAttachments() 
         }
         _isStreaming.value = true
 
@@ -217,12 +219,15 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             var fullResponse = ""
 
+            // MODEL SWITCHER LOGIC:
+            // ሁልጊዜ ወቅታዊውን _config.value ይጠቀማል።
+            // በዚህ ምክንያት Control Panel ላይ ሞዴል ሲቀየር የሚቀጥለው ጥያቄ በአዲሱ ሞዴል ይሄዳል።
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = userMsg.text,
                 attachments = userMsg.attachments,
                 history = currentHistory,
-                config = _config.value
+                config = _config.value // <--- Critical: Uses current live config
             ).collect { result ->
                 when (result) {
                     is StreamResult.Content -> {
@@ -267,8 +272,7 @@ class MainViewModel @Inject constructor(
         _history.value = _history.value.map { if (it.id == id) it.copy(pinned = !it.pinned) else it }
         saveSessionsToDisk()
     }
-    
-    // Suggestion: Add onCleared to prevent memory leaks from TTS
+
     override fun onCleared() {
         super.onCleared()
         tts?.stop()
