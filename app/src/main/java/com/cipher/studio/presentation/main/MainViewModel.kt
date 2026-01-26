@@ -63,21 +63,21 @@ class MainViewModel @Inject constructor(
     private val _isSidebarOpen = MutableStateFlow(false)
     val isSidebarOpen = _isSidebarOpen.asStateFlow()
 
-    // --- Advanced UI States (NEW & UPDATED) ---
+    // --- Advanced UI States (Full Feature Set) ---
     private val _isVoiceActive = MutableStateFlow(false)
     val isVoiceActive = _isVoiceActive.asStateFlow()
 
     private val _isInputExpanded = MutableStateFlow(false)
     val isInputExpanded = _isInputExpanded.asStateFlow()
 
-    // NEW: Model Name for Top Bar Badge
+    // For the Top Bar Badge (Shows current active brain)
     private val _currentModelName = MutableStateFlow("Cipher 1.0 Ultra") 
     val currentModelName = _currentModelName.asStateFlow()
 
-    // NEW: Suggestion Chips Data
+    // Suggestion Chips (To fill the dead space)
     val suggestionChips = listOf(
-        "Generate Kotlin Code for MVVM",
-        "Analyze this UI Layout",
+        "Generate Kotlin Code",
+        "Analyze this UI",
         "Debug my crash log",
         "Write a creative story"
     )
@@ -111,11 +111,11 @@ class MainViewModel @Inject constructor(
             if (status != TextToSpeech.ERROR) tts?.language = Locale.US
         }
 
-        // Init Speech Recognition (SAFE MODE)
+        // Init Speech Recognition (Crash Safe Implementation)
         initSpeechRecognizer()
     }
 
-    // --- VOICE INPUT LOGIC (REAL IMPLEMENTATION) ---
+    // --- VOICE INPUT LOGIC (Robust & Safe) ---
     private fun initSpeechRecognizer() {
         try {
             if (SpeechRecognizer.isRecognitionAvailable(application)) {
@@ -129,6 +129,7 @@ class MainViewModel @Inject constructor(
 
                     override fun onError(error: Int) {
                         _isVoiceActive.value = false
+                        // Handle error silently or update UI state if needed
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -136,6 +137,7 @@ class MainViewModel @Inject constructor(
                         if (!matches.isNullOrEmpty()) {
                             val spokenText = matches[0]
                             val currentText = _prompt.value
+                            // Smart append: adds space if needed
                             _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
                         }
                         _isVoiceActive.value = false
@@ -147,12 +149,13 @@ class MainViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            // Fail gracefully if device doesn't support speech
         }
     }
 
     fun toggleVoiceInput() {
         if (speechRecognizer == null) {
-            initSpeechRecognizer()
+            initSpeechRecognizer() // Retry init if failed previously
         }
 
         if (_isVoiceActive.value) {
@@ -183,11 +186,19 @@ class MainViewModel @Inject constructor(
         _isInputExpanded.value = expanded
     }
 
-    // --- CONFIGURATION LINK ---
+    // --- CONFIGURATION & MODEL SWITCHING ---
     fun updateConfig(newConfig: ModelConfig) {
         _config.value = newConfig
-        // Update model name based on config if needed
-        _currentModelName.value = if(newConfig.modelName.contains("gemini")) "Gemini Pro" else "Cipher Ultra"
+        
+        // Update Badge Name based on model selection
+        val name = newConfig.modelName.lowercase()
+        _currentModelName.value = when {
+            name.contains("gemini-pro") -> "Gemini Pro"
+            name.contains("gemini-1.5") -> "Gemini 1.5 Flash"
+            name.contains("gpt") -> "GPT Model"
+            else -> "Cipher Ultra"
+        }
+        
         saveSessionsToDisk()
     }
 
@@ -211,6 +222,8 @@ class MainViewModel @Inject constructor(
         _config.value = session.config
         _isSidebarOpen.value = false
         _isInputExpanded.value = false 
+        // Sync model name when loading session
+        updateConfig(session.config)
     }
 
     fun deleteSession(sessionId: String) {
@@ -243,7 +256,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // --- CHAT LOGIC ---
+    // --- CHAT EXECUTION LOGIC ---
     fun handleRun(overridePrompt: String? = null) {
         val textToRun = overridePrompt ?: _prompt.value
         val attachmentsToUse = if (overridePrompt != null) emptyList() else _attachments.value
@@ -256,6 +269,7 @@ class MainViewModel @Inject constructor(
             return
         }
 
+        // 1. Create User Message
         val userMsg = ChatMessage(
             id = UUID.randomUUID().toString(),
             role = ChatRole.USER,
@@ -267,12 +281,14 @@ class MainViewModel @Inject constructor(
         val currentHistory = _history.value + userMsg
         _history.value = currentHistory
 
+        // 2. Clear Inputs
         if (overridePrompt == null) {
             _prompt.value = ""
             clearAttachments()
         }
         _isStreaming.value = true
 
+        // 3. Update Title (First Message)
         if (currentHistory.size == 1) {
             val title = textToRun.take(30) + "..."
             val currentId = _currentSessionId.value
@@ -281,12 +297,14 @@ class MainViewModel @Inject constructor(
             }
         }
 
+        // 4. Add AI Placeholder
         val modelMsgId = UUID.randomUUID().toString()
         val placeholderMsg = ChatMessage(modelMsgId, ChatRole.MODEL, "", System.currentTimeMillis())
         _history.value = currentHistory + placeholderMsg
 
         saveSessionsToDisk()
 
+        // 5. Start Streaming
         viewModelScope.launch {
             var fullResponse = ""
 
@@ -316,6 +334,7 @@ class MainViewModel @Inject constructor(
     }
 
     // --- HELPER FUNCTIONS ---
+
     private fun updateLastMessage(newText: String) {
         val list = _history.value.toMutableList()
         if (list.isNotEmpty()) {
@@ -368,6 +387,7 @@ class MainViewModel @Inject constructor(
         saveSessionsToDisk()
     }
 
+    // --- CLEANUP ---
     override fun onCleared() {
         super.onCleared()
         tts?.stop()
