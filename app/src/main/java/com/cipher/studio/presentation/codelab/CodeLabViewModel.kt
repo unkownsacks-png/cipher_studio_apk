@@ -101,7 +101,7 @@ class CodeLabViewModel @Inject constructor(
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.GEMINI_PRO,
+                model = ModelName.FLASH,
                 temperature = 0.5, // Balanced creativity
                 systemInstruction = systemInstruction
             )
