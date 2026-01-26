@@ -9,26 +9,36 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable 
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -95,7 +105,6 @@ fun SplashScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        // Use the Custom Logo here too for consistency
         Image(
             painter = painterResource(id = R.drawable.my_logo),
             contentDescription = "Logo",
@@ -213,7 +222,7 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                 // 3. RIGHT CONTROL PANEL
                 ControlPanel(
                     config = config,
-                    onChange = { viewModel.updateConfig(it) }, // FIXED: Connect to ViewModel
+                    onChange = { viewModel.updateConfig(it) }, 
                     isOpen = isControlsOpen,
                     onClose = { isControlsOpen = false },
                     theme = theme
@@ -231,9 +240,8 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        // Action: Call ViewModel to delete
                         sessionToDelete?.let { id ->
-                            viewModel.deleteSession(id) // Ensure this exists in VM
+                            viewModel.deleteSession(id) 
                             Toast.makeText(context, "Conversation deleted", Toast.LENGTH_SHORT).show()
                         }
                         sessionToDelete = null
@@ -264,7 +272,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
-// ... (Rest of the file remains unchanged as per instruction) ...
 // --- HEADER (Updated with Logo) ---
 @Composable
 fun GeminiTopBar(
@@ -279,12 +286,10 @@ fun GeminiTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Menu Button
         IconButton(onClick = onMenuClick) {
             Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
         }
 
-        // Title or Logo in Center (Optional, but clean)
         if (currentView != ViewMode.CHAT) {
             Text(
                 text = currentView.name.replace("_", " "),
@@ -294,7 +299,6 @@ fun GeminiTopBar(
             )
         }
 
-        // Config Button
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground)
         }
@@ -320,54 +324,265 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (history.isNotEmpty()) listState.animateScrollToItem(history.size - 1)
     }
 
+    // NEW: Full Screen Editor State
+    var isExpanded by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            if (history.isEmpty()) {
-                item { GreetingHeader() }
-            }
+        if (!isExpanded) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(top = 0.dp, bottom = 120.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (history.isEmpty()) {
+                    item { GreetingHeader() }
+                }
 
-            items(history) { message ->
-                ChatMessageItem(
-                    msg = message,
-                    isDark = isDark,
-                    isStreaming = isStreaming && message == history.last() && message.role == ChatRole.MODEL,
-                    onSpeak = { viewModel.speakText(it) },
-                    onPin = { viewModel.togglePin(it) },
-                    onRegenerate = { /* Call VM */ },
-                    onEdit = { viewModel.updatePrompt(it) }
-                )
-            }
+                items(history) { message ->
+                    ChatMessageItem(
+                        msg = message,
+                        isDark = isDark,
+                        isStreaming = isStreaming && message == history.last() && message.role == ChatRole.MODEL,
+                        onSpeak = { viewModel.speakText(it) },
+                        onPin = { viewModel.togglePin(it) },
+                        onRegenerate = { /* Call VM */ },
+                        onEdit = { viewModel.updatePrompt(it) }
+                    )
+                }
 
-            if (isStreaming) {
-                item { StreamingIndicator() }
+                if (isStreaming) {
+                    item { StreamingIndicator() }
+                }
             }
         }
 
-        // --- FLOATING INPUT BAR ---
+        // --- NEW SMART DYNAMIC INPUT BAR ---
+        // This box aligns to bottom, or fills screen if expanded
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
+                .fillMaxHeight(if (isExpanded) 1f else Float.NaN) // Full height if expanded
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)
-                    )
+                    if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent
                 )
                 .imePadding() 
         ) {
-            GeminiInputBar(
+            // Gradient scrim for non-expanded mode
+            if (!isExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)
+                            )
+                        )
+                )
+            }
+
+            GeminiSmartInputBar(
                 prompt = prompt,
                 onPromptChange = { viewModel.updatePrompt(it) },
-                onSend = { viewModel.handleRun(); focusManager.clearFocus() },
+                onSend = { viewModel.handleRun(); focusManager.clearFocus(); isExpanded = false },
                 onAttach = { galleryLauncher.launch("image/*") },
                 isStreaming = isStreaming,
-                attachmentCount = attachments.size
+                attachmentCount = attachments.size,
+                isExpanded = isExpanded,
+                onExpandToggle = { isExpanded = !isExpanded },
+                onMicClick = { /* Future: Implement Voice Logic */ }
             )
         }
+    }
+}
+
+// --- NEW COMPONENT: SMART INPUT BAR ---
+@Composable
+fun GeminiSmartInputBar(
+    prompt: String,
+    onPromptChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onAttach: () -> Unit,
+    isStreaming: Boolean,
+    attachmentCount: Int,
+    isExpanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onMicClick: () -> Unit
+) {
+    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isExpanded) 0.5f else 0.9f)
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (isExpanded) 0.dp else 12.dp,
+                end = if (isExpanded) 0.dp else 12.dp,
+                bottom = if (isExpanded) 0.dp else 16.dp,
+                top = if (isExpanded) 0.dp else 0.dp
+            )
+            .animateContentSize() // Smooth expand animation
+    ) {
+        // Attachments Preview (if any)
+        if (attachmentCount > 0 && !isExpanded) {
+            Row(
+                modifier = Modifier
+                    .padding(bottom = 8.dp, start = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Image, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("$attachmentCount Image Attached", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+        }
+
+        // Main Input Container
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(if (isExpanded) 1f else Float.NaN) // Fullscreen logic
+                .shadow(if (isExpanded) 0.dp else 4.dp, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp), spotColor = Color.Black.copy(0.1f))
+                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
+                .background(bgColor)
+                .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 28.dp))
+        ) {
+            // Expanded Header (Close/Send)
+            if (isExpanded) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onExpandToggle) {
+                        Icon(Icons.Rounded.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Button(
+                        onClick = onSend,
+                        enabled = prompt.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Send")
+                    }
+                }
+                Divider(color = borderColor)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(if (isExpanded) 16.dp else 12.dp),
+                verticalAlignment = if (isExpanded) Alignment.Top else Alignment.Bottom // Align bottom for normal chat look
+            ) {
+                // Left Actions (Attach + Mic) - Only show if not expanded (in expand mode they can be in toolbar)
+                if (!isExpanded) {
+                    IconButton(
+                        onClick = onAttach,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MaterialTheme.colorScheme.background, CircleShape)
+                            .border(1.dp, borderColor, CircleShape)
+                    ) {
+                        Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    IconButton(
+                        onClick = onMicClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(MaterialTheme.colorScheme.background, CircleShape)
+                            .border(1.dp, borderColor, CircleShape)
+                    ) {
+                        Icon(Icons.Rounded.Mic, "Voice", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+
+                // Text Field
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = if (isExpanded) 0.dp else 6.dp)
+                        .heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 120.dp) // Dynamic Growth
+                ) {
+                    if (prompt.isEmpty()) {
+                        Text(
+                            if (isExpanded) "Start coding or writing..." else "Message Cipher...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    BasicTextField(
+                        value = prompt,
+                        onValueChange = onPromptChange,
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 18.sp,
+                            lineHeight = 26.sp
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .ifTrue(isExpanded) { fillMaxHeight() }
+                    )
+                }
+
+                // Right Actions (Expand + Send)
+                if (!isExpanded) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Expand Button
+                    IconButton(
+                        onClick = onExpandToggle,
+                        modifier = Modifier.size(32.dp).padding(bottom = 2.dp)
+                    ) {
+                        Icon(Icons.Rounded.Fullscreen, "Expand", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Send Button (Morphs based on state)
+                    val isSendEnabled = prompt.isNotBlank() || isStreaming
+                    val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp) // Slightly larger FAB style
+                            .clip(CircleShape)
+                            .background(btnColor)
+                            .clickable(enabled = isSendEnabled) { onSend() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isStreaming) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Icon(
+                                if (prompt.isNotBlank()) Icons.Rounded.ArrowUpward else Icons.Rounded.Mic, // Logic: Mic if empty, Arrow if text
+                                "Send",
+                                tint = if (isSendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper Extension for Conditional Modifier
+fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
+    return if (condition) {
+        then(modifier(Modifier))
+    } else {
+        this
     }
 }
 
@@ -404,98 +619,6 @@ fun GreetingHeader() {
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
-    }
-}
-
-// --- INPUT BAR ---
-@Composable
-fun GeminiInputBar(
-    prompt: String,
-    onPromptChange: (String) -> Unit,
-    onSend: () -> Unit,
-    onAttach: () -> Unit,
-    isStreaming: Boolean,
-    attachmentCount: Int
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp, top = 12.dp)
-    ) {
-        if (attachmentCount > 0) {
-            Row(
-                modifier = Modifier
-                    .padding(bottom = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Image, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("$attachmentCount attached", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onAttach,
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(MaterialTheme.colorScheme.background, CircleShape)
-            ) {
-                Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface)
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Box(modifier = Modifier.weight(1f)) {
-                if (prompt.isEmpty()) {
-                    Text(
-                        "Message Cipher...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-                BasicTextField(
-                    value = prompt,
-                    onValueChange = onPromptChange,
-                    textStyle = TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 18.sp
-                    ),
-                    maxLines = 4,
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            val isEnabled = prompt.isNotBlank() || isStreaming
-            IconButton(
-                onClick = onSend,
-                enabled = isEnabled,
-                modifier = Modifier.size(28.dp)
-            ) {
-                if (isStreaming) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(
-                        Icons.Rounded.ArrowUpward,
-                        "Send",
-                        tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                    )
-                }
-            }
-        }
     }
 }
 
