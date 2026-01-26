@@ -1,11 +1,17 @@
 package com.cipher.studio.presentation.main
 
 import android.app.Application
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Base64
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cipher.studio.data.local.ApiKeyManager
@@ -28,10 +34,10 @@ class MainViewModel @Inject constructor(
     private val aiService: GenerativeAIService,
     private val apiKeyManager: ApiKeyManager,
     private val storageManager: LocalStorageManager,
-    application: Application
+    private val application: Application
 ) : AndroidViewModel(application) {
 
-    // --- State ---
+    // --- Existing State ---
     private val _isAuthorized = MutableStateFlow(storageManager.isAuthorized())
     val isAuthorized = _isAuthorized.asStateFlow()
 
@@ -65,7 +71,15 @@ class MainViewModel @Inject constructor(
     private val _config = MutableStateFlow(AppConstants.DEFAULT_CONFIG)
     val config = _config.asStateFlow()
 
+    // --- NEW STATES: Voice & Fullscreen ---
+    private val _isVoiceActive = MutableStateFlow(false)
+    val isVoiceActive = _isVoiceActive.asStateFlow()
+
+    private val _isInputExpanded = MutableStateFlow(false)
+    val isInputExpanded = _isInputExpanded.asStateFlow()
+
     private var tts: TextToSpeech? = null
+    private var speechRecognizer: SpeechRecognizer? = null
 
     init {
         val savedSessions = storageManager.getSessions()
@@ -76,9 +90,79 @@ class MainViewModel @Inject constructor(
             createNewSession()
         }
 
+        // Initialize TTS
         tts = TextToSpeech(application) { status ->
             if (status != TextToSpeech.ERROR) tts?.language = Locale.US
         }
+
+        // Initialize Speech Recognizer (Real Logic)
+        initSpeechRecognizer()
+    }
+
+    // --- VOICE INPUT LOGIC (REAL) ---
+    private fun initSpeechRecognizer() {
+        if (SpeechRecognizer.isRecognitionAvailable(application)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(application)
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    _isVoiceActive.value = false
+                }
+
+                override fun onError(error: Int) {
+                    _isVoiceActive.value = false
+                    // Simple error handling, could be more detailed
+                    // Toast.makeText(application, "Voice Error: $error", Toast.LENGTH_SHORT).show()
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        val spokenText = matches[0]
+                        // Append to existing prompt or set new
+                        val currentText = _prompt.value
+                        _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
+                    }
+                    _isVoiceActive.value = false
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+    }
+
+    fun toggleVoiceInput() {
+        if (_isVoiceActive.value) {
+            // Stop
+            speechRecognizer?.stopListening()
+            _isVoiceActive.value = false
+        } else {
+            // Start
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            try {
+                speechRecognizer?.startListening(intent)
+                _isVoiceActive.value = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _isVoiceActive.value = false
+            }
+        }
+    }
+
+    fun toggleFullscreenInput() {
+        _isInputExpanded.value = !_isInputExpanded.value
+    }
+
+    fun setInputExpanded(expanded: Boolean) {
+        _isInputExpanded.value = expanded
     }
 
     // --- Actions ---
@@ -108,15 +192,11 @@ class MainViewModel @Inject constructor(
         _isSidebarOpen.value = false
     }
 
-    // --- NEW FIX: Configuration Logic ---
-    // ControlPanel ላይ ለውጥ ሲደረግ ይህ ፈንክሽን ይጠራል
     fun updateConfig(newConfig: ModelConfig) {
         _config.value = newConfig
-        // አዲሱን መቼት (Config) አሁን ወዳለው ሴሽን ላይ መዝግብ
         saveSessionsToDisk()
     }
 
-    // --- EXISTING FIX: Added deleteSession Function ---
     fun deleteSession(sessionId: String) {
         val updatedList = _sessions.value.filter { it.id != sessionId }
         _sessions.value = updatedList
@@ -147,7 +227,7 @@ class MainViewModel @Inject constructor(
     fun addAttachment(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val context = getApplication<Application>().applicationContext
+                val context = application.applicationContext
                 val inputStream = context.contentResolver.openInputStream(uri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
 
@@ -219,15 +299,12 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             var fullResponse = ""
 
-            // MODEL SWITCHER LOGIC:
-            // ሁልጊዜ ወቅታዊውን _config.value ይጠቀማል።
-            // በዚህ ምክንያት Control Panel ላይ ሞዴል ሲቀየር የሚቀጥለው ጥያቄ በአዲሱ ሞዴል ይሄዳል።
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = userMsg.text,
                 attachments = userMsg.attachments,
                 history = currentHistory,
-                config = _config.value // <--- Critical: Uses current live config
+                config = _config.value
             ).collect { result ->
                 when (result) {
                     is StreamResult.Content -> {
@@ -277,5 +354,6 @@ class MainViewModel @Inject constructor(
         super.onCleared()
         tts?.stop()
         tts?.shutdown()
+        speechRecognizer?.destroy() // Cleanup
     }
 }
