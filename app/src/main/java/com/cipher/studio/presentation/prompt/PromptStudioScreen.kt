@@ -94,7 +94,13 @@ fun PromptStudioScreen(
         }
 
         // --- FEATURE 3: Template Chips ---
-        Text("QUICK STARTERS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                Text(
+            text = "QUICK STARTERS", 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = Color.Gray, 
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
@@ -109,14 +115,16 @@ fun PromptStudioScreen(
                         containerColor = if(isDark) Color(0xFF1E293B) else Color.White,
                         labelColor = textColor
                     ),
-                    // FIX: Changed BorderStroke to suggestionChipBorder
                     border = SuggestionChipDefaults.suggestionChipBorder(
-                        borderColor = if(isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
+                        enabled = true,
+                        borderColor = if(isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f),
+                        borderWidth = 1.dp
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
             }
         }
+
 
         // --- FEATURE 1 & 7: Magical Input Card (Glassmorphism + Glow) ---
         Box(
@@ -212,7 +220,7 @@ fun PromptStudioScreen(
                             .background(if(isDark) Color(0xFF1E293B) else Color(0xFFEFF6FF))
                             .padding(16.dp)
                     ) {
-                        Row(horizontalAlignment = Alignment.Start) {
+                        Row(horizontalArrangement = Arrangement.Start) {
                             Icon(Icons.Rounded.Lightbulb, null, tint = Color(0xFFF59E0B), modifier = Modifier.padding(top = 2.dp).size(18.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
