@@ -45,13 +45,14 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FIXED & FLATTENED)
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (STABLE ID VERSION)
  * 
- * FIX 1: Restored 'MarkdownRenderer' function for backward compatibility with ChatMessageItem.kt
- * FIX 2: Exposed individual components for MainScreen flattening logic.
+ * CRITICAL FIX: Removed random UUID generation for blocks.
+ * Now uses deterministic IDs based on the parent message ID.
+ * This prevents LazyColumn crashes during initial heavy streaming.
  */
 
-// --- COMPATIBILITY WRAPPER (Fixes ChatMessageItem.kt error) ---
+// --- COMPATIBILITY WRAPPER ---
 @Composable
 fun MarkdownRenderer(
     content: String,
@@ -59,9 +60,10 @@ fun MarkdownRenderer(
     isStreaming: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val blocks = parseMarkdownBlocks(content)
+    // Generate a temporary ID for standalone usage
+    val tempId = remember { UUID.randomUUID().toString() }
+    val blocks = parseMarkdownBlocks(content, tempId)
 
-    // Using Column ensures no "Nested Scroll" crash if used inside another LazyColumn
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -72,30 +74,38 @@ fun MarkdownRenderer(
     }
 }
 
-// --- DATA STRUCTURES (Exposed for MainScreen) ---
-sealed class MarkdownBlock(val id: String = UUID.randomUUID().toString()) {
-    data class Header(val text: String, val level: Int) : MarkdownBlock()
-    data class Text(val content: String) : MarkdownBlock()
-    data class Code(val language: String, val content: String) : MarkdownBlock()
-    data class Table(val rows: List<List<String>>) : MarkdownBlock()
-    data class Image(val url: String, val altText: String) : MarkdownBlock()
-    data class Quote(val content: String) : MarkdownBlock()
-    data class ListItem(val content: String, val isOrdered: Boolean) : MarkdownBlock()
-    data class TaskItem(val content: String, val isChecked: Boolean) : MarkdownBlock()
-    object Rule : MarkdownBlock()
+// --- DATA STRUCTURES (Now with explicit ID override) ---
+sealed class MarkdownBlock {
+    abstract val id: String // Abstract ID to force stable implementation
+
+    data class Header(val text: String, val level: Int, override val id: String) : MarkdownBlock()
+    data class Text(val content: String, override val id: String) : MarkdownBlock()
+    data class Code(val language: String, val content: String, override val id: String) : MarkdownBlock()
+    data class Table(val rows: List<List<String>>, override val id: String) : MarkdownBlock()
+    data class Image(val url: String, val altText: String, override val id: String) : MarkdownBlock()
+    data class Quote(val content: String, override val id: String) : MarkdownBlock()
+    data class ListItem(val content: String, val isOrdered: Boolean, override val id: String) : MarkdownBlock()
+    data class TaskItem(val content: String, val isChecked: Boolean, override val id: String) : MarkdownBlock()
+    object Rule : MarkdownBlock() {
+        override val id: String = "rule_static"
+    }
 }
 
-// --- PARSER LOGIC (Exposed) ---
-fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
+// --- PARSER LOGIC (Updated to accept Base ID) ---
+fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
     val lines = text.lines()
     var i = 0
+    var blockIndex = 0 // Counter for stable IDs
+
+    // Helper to generate stable IDs
+    fun getStableId() = "${baseId}_blk_${blockIndex++}"
 
     while (i < lines.size) {
         val line = lines[i]
         val trimmed = line.trim()
 
-        // 1. Code Block (Strict & Loose detection)
+        // 1. Code Block
         if (trimmed.startsWith("```")) {
             val language = trimmed.removePrefix("```").trim()
             val codeBuilder = StringBuilder()
@@ -104,7 +114,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
                 codeBuilder.append(lines[i]).append("\n")
                 i++
             }
-            blocks.add(MarkdownBlock.Code(language, codeBuilder.toString().trimEnd()))
+            blocks.add(MarkdownBlock.Code(language, codeBuilder.toString().trimEnd(), getStableId()))
             i++
             continue
         }
@@ -119,13 +129,13 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
                 }
                 i++
             }
-            if (tableRows.isNotEmpty()) blocks.add(MarkdownBlock.Table(tableRows))
+            if (tableRows.isNotEmpty()) blocks.add(MarkdownBlock.Table(tableRows, getStableId()))
             continue
         }
 
         // 3. Horizontal Rule
         if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
-            blocks.add(MarkdownBlock.Rule)
+            blocks.add(MarkdownBlock.Rule) // Rule object has static ID
             i++
             continue
         }
@@ -136,7 +146,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         if (taskMatch != null) {
             val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
             val content = taskMatch.groupValues[2]
-            blocks.add(MarkdownBlock.TaskItem(content, isChecked))
+            blocks.add(MarkdownBlock.TaskItem(content, isChecked, getStableId()))
             i++
             continue
         }
@@ -144,23 +154,23 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         // 5. Lists
         if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
             val content = trimmed.substring(2).trim()
-            blocks.add(MarkdownBlock.ListItem(content, isOrdered = false))
+            blocks.add(MarkdownBlock.ListItem(content, isOrdered = false, getStableId()))
             i++
             continue
         }
         val orderedRegex = Regex("^\\d+\\.\\s(.*)")
         val orderedMatch = orderedRegex.find(trimmed)
         if (orderedMatch != null) {
-            blocks.add(MarkdownBlock.ListItem(orderedMatch.groupValues[1], isOrdered = true))
+            blocks.add(MarkdownBlock.ListItem(orderedMatch.groupValues[1], isOrdered = true, getStableId()))
             i++
             continue
         }
 
-        // 6. Headers (Improved to catch AI hallucinated formats)
+        // 6. Headers
         if (trimmed.startsWith("#")) {
             val level = trimmed.takeWhile { it == '#' }.length
             val content = trimmed.removePrefix("#".repeat(level)).trim()
-            blocks.add(MarkdownBlock.Header(content, level))
+            blocks.add(MarkdownBlock.Header(content, level, getStableId()))
             i++
             continue
         }
@@ -168,7 +178,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         // 7. Block Quotes
         if (trimmed.startsWith(">")) {
             val content = trimmed.removePrefix(">").trim()
-            blocks.add(MarkdownBlock.Quote(content))
+            blocks.add(MarkdownBlock.Quote(content, getStableId()))
             i++
             continue
         }
@@ -176,12 +186,12 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         // 8. Images
         val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
         if (imgMatch != null) {
-            blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1]))
+            blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1], getStableId()))
             i++
             continue
         }
 
-        // 9. Regular Text (Accumulate lines until a special block starts)
+        // 9. Regular Text
         val textBuilder = StringBuilder()
         while (i < lines.size) {
             val nextTrim = lines[i].trim()
@@ -193,13 +203,13 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             i++
         }
         if (textBuilder.isNotEmpty()) {
-            blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd()))
+            blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd(), getStableId()))
         }
     }
     return blocks
 }
 
-// --- SHARED BLOCK RENDERER (Used by both MarkdownRenderer and MainScreen) ---
+// --- SHARED BLOCK RENDERER ---
 @Composable
 fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
     val theme = if(isDark) Theme.DARK else Theme.LIGHT
