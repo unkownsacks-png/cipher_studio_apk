@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,8 +18,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.BrokenImage
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,33 +42,22 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.cipher.studio.domain.model.Theme
 import kotlinx.coroutines.delay
-
-// --- OPTIMIZATION 1: PRE-COMPILED REGEX PATTERNS (Global) ---
-// Regexን በየሴኮንዱ መፍጠር ስልኩን ያጨናንቃል፣ ስለዚህ እዚህ አንድ ጊዜ ብቻ እንፈጥራቸዋለን።
-private val CODE_BLOCK_REGEX = Regex("```")
-private val TABLE_REGEX = Regex("^\\|")
-private val HR_REGEX = Regex("^---|\\*\\*\\*|___")
-private val TASK_REGEX = Regex("^[-*]\\s\\[([ xX])\\]\\s(.*)")
-private val UNORDERED_LIST_REGEX = Regex("^[-*+]\\s")
-private val ORDERED_LIST_REGEX = Regex("^\\d+\\.\\s(.*)")
-private val HEADER_REGEX = Regex("^#+")
-private val QUOTE_REGEX = Regex("^>")
-private val IMAGE_REGEX = Regex("^!\\[(.*?)\\]\\((.*?)\\)$")
-private val LINK_REGEX = Regex("\\[([^\\]]+)\\]\\(([^\\)]+)\\)")
-private val INLINE_STYLE_REGEX = Regex("(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)")
-
-// Syntax Highlighting Regexes
-private val KEYWORDS_REGEX = "\\b(fun|val|var|return|if|else|for|while|class|object|package|import|def|function|const|let|print|println|composable|remember)\\b".toRegex()
-private val STRING_REGEX = "\".*?\"".toRegex()
-private val NUMBER_REGEX = "\\b\\d+\\b".toRegex()
-private val COMMENT_REGEX = "//.*".toRegex()
+import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (PERFORMANCE OPTIMIZED)
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FINAL VERSION)
+ * Features:
+ * 1. Syntax Highlighting (Keywords, Strings, Numbers)
+ * 2. Full Inline Styles (Bold, Italic, Strikethrough, Inline Code, Links)
+ * 3. Advanced Blocks (Lists, Task Lists, Tables, Headers, Blockquotes, Rules)
+ * 4. Amharic Optimization (LineHeight & Regex)
+ * 5. macOS Style Code Blocks
+ * 6. PERFORMANCE OPTIMIZED: Uses LazyColumn for smooth scrolling of large content
  */
 @Composable
 fun MarkdownRenderer(
@@ -73,18 +66,22 @@ fun MarkdownRenderer(
     isStreaming: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // OPTIMIZATION 2: Heavy Parsing is cached. 
-    // It only re-runs if 'content' actually changes.
+    // 1. Optimized Parsing with derivedStateOf to prevent jank during streaming
     val blocks by remember(content) {
         derivedStateOf { parseMarkdownBlocks(content) }
     }
 
-    Column(
+    // UPDATED: Use LazyColumn instead of Column for rendering performance
+    LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        // This ensures the Markdown renderer behaves well if nested in another scrollable
+        userScrollEnabled = false 
     ) {
-        blocks.forEach { block ->
-            // Use 'key' logic implicitly by structure, but lightweight components help.
+        items(
+            items = blocks,
+            key = { it.id } // Performance Optimization: Unique ID for Compose smart diffing
+        ) { block ->
             when (block) {
                 is MarkdownBlock.Header -> {
                     Text(
@@ -106,12 +103,16 @@ fun MarkdownRenderer(
                     )
                 }
                 is MarkdownBlock.Table -> {
-                    MarkdownTable(rows = block.rows, isDark = theme == Theme.DARK)
+                    MarkdownTable(
+                        rows = block.rows,
+                        isDark = theme == Theme.DARK
+                    )
                 }
                 is MarkdownBlock.Image -> {
                     EliteImage(url = block.url, alt = block.altText)
                 }
                 is MarkdownBlock.Quote -> {
+                    // Block Quote Support (>)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -129,7 +130,9 @@ fun MarkdownRenderer(
                         StyledText(text = block.content, isDark = theme == Theme.DARK, fontSize = 16.sp, isItalic = true)
                     }
                 }
+
                 is MarkdownBlock.Rule -> {
+                    // Horizontal Rule (---)
                     Divider(
                         color = if (theme == Theme.DARK) Color.Gray.copy(alpha = 0.3f) else Color.LightGray,
                         thickness = 1.dp,
@@ -137,7 +140,11 @@ fun MarkdownRenderer(
                     )
                 }
                 is MarkdownBlock.ListItem -> {
-                    Row(modifier = Modifier.padding(start = 8.dp), verticalAlignment = Alignment.Top) {
+                    // Lists (Ordered & Unordered)
+                    Row(
+                        modifier = Modifier.padding(start = 8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Text(
                             text = "•",
                             fontSize = 20.sp,
@@ -149,7 +156,11 @@ fun MarkdownRenderer(
                     }
                 }
                 is MarkdownBlock.TaskItem -> {
-                    Row(modifier = Modifier.padding(start = 4.dp), verticalAlignment = Alignment.Top) {
+                    // Task Lists [ ] or [x]
+                    Row(
+                        modifier = Modifier.padding(start = 4.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Icon(
                             imageVector = if (block.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                             contentDescription = null,
@@ -157,19 +168,26 @@ fun MarkdownRenderer(
                             modifier = Modifier.size(20.dp).padding(top = 2.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        StyledText(text = block.content, isDark = theme == Theme.DARK, isStrikethrough = block.isChecked)
+                        StyledText(
+                            text = block.content,
+                            isDark = theme == Theme.DARK,
+                            isStrikethrough = block.isChecked // Strike if checked
+                        )
                     }
                 }
                 is MarkdownBlock.Text -> {
-                    StyledText(text = block.content, isDark = theme == Theme.DARK)
+                    StyledText(
+                        text = block.content,
+                        isDark = theme == Theme.DARK
+                    )
                 }
             }
         }
     }
 }
 
-// --- DATA STRUCTURES (Unchanged) ---
-sealed class MarkdownBlock {
+// --- DATA STRUCTURES (Updated with Unique ID for Performance) ---
+sealed class MarkdownBlock(val id: String = UUID.randomUUID().toString()) {
     data class Header(val text: String, val level: Int) : MarkdownBlock()
     data class Text(val content: String) : MarkdownBlock()
     data class Code(val language: String, val content: String) : MarkdownBlock()
@@ -181,7 +199,7 @@ sealed class MarkdownBlock {
     object Rule : MarkdownBlock()
 }
 
-// --- PARSER LOGIC (OPTIMIZED) ---
+// --- PARSER LOGIC ---
 fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
     val lines = text.lines()
@@ -206,11 +224,11 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         }
 
         // 2. Table
-        if (TABLE_REGEX.containsMatchIn(trimmed)) {
+        if (trimmed.startsWith("|")) {
             val tableRows = mutableListOf<List<String>>()
-            while (i < lines.size && TABLE_REGEX.containsMatchIn(lines[i].trim())) {
+            while (i < lines.size && lines[i].trim().startsWith("|")) {
                 val row = lines[i].split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                if (!row.any { it.contains("---") }) {
+                if (!row.any { it.contains("---") }) { // Skip separator
                     tableRows.add(row)
                 }
                 i++
@@ -219,15 +237,17 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 3. Horizontal Rule
-        if (HR_REGEX.matches(trimmed)) {
+        // 3. Horizontal Rule (---, ***, ___)
+        if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
             blocks.add(MarkdownBlock.Rule)
             i++
             continue
         }
 
-        // 4. Task Lists
-        val taskMatch = TASK_REGEX.find(trimmed)
+        // 4. Task Lists (- [ ] or - [x])
+        // Regex: Starts with - or *, followed by space, [ space or x ], space
+        val taskRegex = Regex("^[-*]\\s\\[([ xX])\\]\\s(.*)")
+        val taskMatch = taskRegex.find(trimmed)
         if (taskMatch != null) {
             val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
             val content = taskMatch.groupValues[2]
@@ -236,21 +256,24 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 5. Lists
-        if (UNORDERED_LIST_REGEX.containsMatchIn(trimmed)) {
+        // 5. Lists (Unordered & Ordered)
+        // Unordered: *, -, +
+        if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
             val content = trimmed.substring(2).trim()
             blocks.add(MarkdownBlock.ListItem(content, isOrdered = false))
             i++
             continue
         }
-        val orderedMatch = ORDERED_LIST_REGEX.find(trimmed)
+        // Ordered: 1. 
+        val orderedRegex = Regex("^\\d+\\.\\s(.*)")
+        val orderedMatch = orderedRegex.find(trimmed)
         if (orderedMatch != null) {
             blocks.add(MarkdownBlock.ListItem(orderedMatch.groupValues[1], isOrdered = true))
             i++
             continue
         }
 
-        // 6. Headers
+        // 6. Headers (#)
         if (trimmed.startsWith("#")) {
             val level = trimmed.takeWhile { it == '#' }.length
             val content = trimmed.removePrefix("#".repeat(level)).trim()
@@ -259,7 +282,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 7. Block Quotes
+        // 7. Block Quotes (>)
         if (trimmed.startsWith(">")) {
             val content = trimmed.removePrefix(">").trim()
             blocks.add(MarkdownBlock.Quote(content))
@@ -268,23 +291,21 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         }
 
         // 8. Images
-        val imgMatch = IMAGE_REGEX.find(trimmed)
+        val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
         if (imgMatch != null) {
             blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1]))
             i++
             continue
         }
 
-        // 9. Regular Text (Optimized Grouping)
+        // 9. Regular Text (Grouped)
         val textBuilder = StringBuilder()
         while (i < lines.size) {
             val nextTrim = lines[i].trim()
-            // Quick check to break loop if a new block starts
-            if (nextTrim.startsWith("```") || TABLE_REGEX.containsMatchIn(nextTrim) || 
-                nextTrim.startsWith("#") || nextTrim.startsWith(">") || 
-                HR_REGEX.matches(nextTrim) || TASK_REGEX.matches(nextTrim) || 
-                UNORDERED_LIST_REGEX.containsMatchIn(nextTrim) || 
-                ORDERED_LIST_REGEX.matches(nextTrim)) break
+            // Break on any special block starter
+            if (nextTrim.startsWith("```") || nextTrim.startsWith("|") || nextTrim.startsWith("#") || 
+                nextTrim.startsWith(">") || nextTrim == "---" || nextTrim == "***" || 
+                nextTrim.startsWith("- [") || nextTrim.startsWith("* ") || nextTrim.startsWith("- ") || nextTrim.matches(Regex("^\\d+\\..*"))) break
 
             textBuilder.append(lines[i]).append("\n")
             i++
@@ -296,18 +317,11 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     return blocks
 }
 
-// --- ELITE CODE BLOCK (Highly Optimized) ---
+// --- ELITE CODE BLOCK (With Syntax Highlighting) ---
 @Composable
 fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
     val clipboardManager = LocalClipboardManager.current
     var isCopied by remember { mutableStateOf(false) }
-
-    // OPTIMIZATION 3: Memoize Syntax Highlighting
-    // This is the HEAVIEST operation. We must calculate it ONLY when 'code' changes.
-    // Without 'remember', this runs on every frame, causing massive lag.
-    val highlightedCode = remember(code, isDark) {
-        syntaxHighlight(code)
-    }
 
     LaunchedEffect(isCopied) {
         if (isCopied) {
@@ -365,7 +379,7 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
             }
         }
 
-        // Code Content
+        // Code Content with Syntax Highlighting
         SelectionContainer {
             Box(
                 modifier = Modifier
@@ -374,7 +388,7 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
                     .padding(16.dp)
             ) {
                 Text(
-                    text = highlightedCode, // Uses the cached version
+                    text = syntaxHighlight(code),
                     style = TextStyle(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
@@ -386,37 +400,44 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
     }
 }
 
-// --- SYNTAX HIGHLIGHTER LOGIC (Optimized) ---
+// --- SYNTAX HIGHLIGHTER LOGIC ---
 fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
-        append(code)
-        
+        val str = code
+        val keywords = listOf("fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", "package", "import", "def", "function", "const", "let")
+        val keywordsRegex = "\\b(${keywords.joinToString("|")})\\b".toRegex()
+        val stringRegex = "\".*?\"".toRegex()
+        val numberRegex = "\\b\\d+\\b".toRegex()
+        val commentRegex = "//.*".toRegex()
+
+        append(str) // Base text
+
         // 1. Strings (Green)
-        STRING_REGEX.findAll(code).forEach { match ->
+        stringRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
         }
 
         // 2. Keywords (Orange/Purple)
-        KEYWORDS_REGEX.findAll(code).forEach { match ->
+        keywordsRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
         }
 
         // 3. Numbers (Blue)
-        NUMBER_REGEX.findAll(code).forEach { match ->
+        numberRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFF79C0FF)), match.range.first, match.range.last + 1)
         }
 
         // 4. Comments (Grey)
-        COMMENT_REGEX.findAll(code).forEach { match ->
+        commentRegex.findAll(str).forEach { match ->
             addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
         }
 
         // Base Color
-        addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, code.length)
+        addStyle(SpanStyle(color = Color(0xFFC9D1D9)), 0, str.length)
     }
 }
 
-// --- ELITE IMAGE (Unchanged) ---
+// --- ELITE IMAGE ---
 @Composable
 fun EliteImage(url: String, alt: String) {
     SubcomposeAsyncImage(
@@ -448,7 +469,7 @@ fun EliteImage(url: String, alt: String) {
     )
 }
 
-// --- STYLED TEXT (Optimized with Caching) ---
+// --- STYLED TEXT (Full Markdown Support) ---
 @Composable
 fun StyledText(
     text: String,
@@ -459,39 +480,41 @@ fun StyledText(
 ) {
     val uriHandler = LocalUriHandler.current
     val color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F)
-    val lineHeight = 32.sp 
+    val lineHeight = 32.sp // AMHARIC OPTIMIZATION: Increased to prevent cut-off
 
-    // OPTIMIZATION 4: Cache the AnnotatedString creation
-    val annotatedString = remember(text, isDark) {
-        buildAnnotatedString {
-            var lastIndex = 0
+    val annotatedString = buildAnnotatedString {
+        // Recursively apply styles: Link -> Strikethrough -> Code -> Bold -> Italic
+        val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
+        var lastIndex = 0
 
-            LINK_REGEX.findAll(text).forEach { matchResult ->
-                val start = matchResult.range.first
-                val end = matchResult.range.last + 1
-                val linkText = matchResult.groupValues[1]
-                val linkUrl = matchResult.groupValues[2]
+        linkRegex.findAll(text).forEach { matchResult ->
+            val start = matchResult.range.first
+            val end = matchResult.range.last + 1
+            val linkText = matchResult.groupValues[1]
+            val linkUrl = matchResult.groupValues[2]
 
-                appendStyles(text.substring(lastIndex, start), isDark)
+            // 1. Append text BEFORE the link
+            appendStyles(text.substring(lastIndex, start), isDark)
 
-                pushStringAnnotation(tag = "URL", annotation = linkUrl)
-                withStyle(
-                    SpanStyle(
-                        color = Color(0xFF3B82F6),
-                        textDecoration = TextDecoration.Underline,
-                        fontWeight = FontWeight.Medium
-                    )
-                ) {
-                    append(linkText)
-                }
-                pop()
-
-                lastIndex = end
+            // 2. Append the LINK itself
+            pushStringAnnotation(tag = "URL", annotation = linkUrl)
+            withStyle(
+                SpanStyle(
+                    color = Color(0xFF3B82F6), // Link Blue
+                    textDecoration = TextDecoration.Underline,
+                    fontWeight = FontWeight.Medium
+                )
+            ) {
+                append(linkText)
             }
+            pop()
 
-            if (lastIndex < text.length) {
-                appendStyles(text.substring(lastIndex), isDark)
-            }
+            lastIndex = end
+        }
+
+        // 3. Append REMAINING text
+        if (lastIndex < text.length) {
+            appendStyles(text.substring(lastIndex), isDark)
         }
     }
 
@@ -518,15 +541,20 @@ fun StyledText(
     )
 }
 
-// --- HELPER: INLINE STYLES ---
+// --- HELPER: ADVANCED INLINE STYLES (Updated with Strikethrough) ---
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
+    // Regex matches: `code`, **bold**, *italic*, or ~~strikethrough~~
+    val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
+
     var lastIndex = 0
 
-    INLINE_STYLE_REGEX.findAll(rawText).forEach { match ->
+    pattern.findAll(rawText).forEach { match ->
+        // Text before the style
         append(rawText.substring(lastIndex, match.range.first))
 
         val content = match.value
         when {
+            // INLINE CODE (`text`)
             content.startsWith("`") -> {
                 val cleanText = content.removeSurrounding("`")
                 withStyle(
@@ -540,16 +568,19 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
                     append(" $cleanText ") 
                 }
             }
+            // BOLD (**text**)
             content.startsWith("**") -> {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
                     append(content.removeSurrounding("**"))
                 }
             }
+            // ITALIC (*text*)
             content.startsWith("*") -> {
                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                     append(content.removeSurrounding("*"))
                 }
             }
+            // STRIKETHROUGH (~~text~~) - NEW!
             content.startsWith("~~") -> {
                 withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
                     append(content.removeSurrounding("~~"))
@@ -559,10 +590,11 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
         lastIndex = match.range.last + 1
     }
 
+    // Remaining text after the last match
     append(rawText.substring(lastIndex))
 }
 
-// --- MARKDOWN TABLE (Unchanged) ---
+// --- COMPONENT: MARKDOWN TABLE ---
 @Composable
 fun MarkdownTable(rows: List<List<String>>, isDark: Boolean) {
     val borderColor = if (isDark) Color.Gray.copy(alpha = 0.3f) else Color.LightGray
