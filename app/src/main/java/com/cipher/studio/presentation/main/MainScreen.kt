@@ -367,7 +367,8 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 } else {
                     // PARSE AI MESSAGE INTO BLOCKS HERE
                     val textToParse = msg.text ?: ""
-                    val blocks = parseMarkdownBlocks(textToParse)
+                    // CRITICAL FIX: Pass message ID to parser for Stable Keys
+                    val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
                     
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
                         // Empty streaming message placeholder
