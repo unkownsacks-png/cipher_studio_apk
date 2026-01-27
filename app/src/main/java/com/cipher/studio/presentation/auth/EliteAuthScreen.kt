@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.Easing
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -199,14 +200,22 @@ fun EliteAuthScreen(
                 ) {
 
                     // 4. LOGO WITH GLITCH EFFECT
-                    AnimatedVisibility(
-                        visible = startAnimation,
-                        enter = scaleIn(tween(600, easing = OvershootInterpolator(1.2f))) + fadeIn(tween(400))
-                    ) {
-                        GlitchLogo(isLoading = isLoading || showSuccessBlast)
-                    }
+                   AnimatedVisibility(
+    visible = startAnimation,
+    enter = scaleIn(
+        animationSpec = tween(
+            durationMillis = 600,
+            // OvershootInterpolatorን ወደ Compose Easing የሚቀይር ማስተካከያ
+            easing = Easing { fraction -> 
+                OvershootInterpolator(1.2f).getInterpolation(fraction) 
+            }
+        )
+    ) + fadeIn(animationSpec = tween(400))
+) {
+    GlitchLogo(isLoading = isLoading || showSuccessBlast)
+}
 
-                    Spacer(modifier = Modifier.height(32.dp))
+Spacer(modifier = Modifier.height(32.dp))
 
                     // 7. DECRYPTION TEXT EFFECT
                     DecryptionText(
