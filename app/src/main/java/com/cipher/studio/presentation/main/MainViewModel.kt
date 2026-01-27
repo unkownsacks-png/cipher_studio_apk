@@ -189,16 +189,16 @@ class MainViewModel @Inject constructor(
     // --- CONFIGURATION & MODEL SWITCHING ---
     fun updateConfig(newConfig: ModelConfig) {
         _config.value = newConfig
-        
+
         // Update Badge Name based on model selection
         val name = newConfig.model.name.lowercase() 
-        
+
         _currentModelName.value = when {
             name.contains("pro") -> "Gemini Pro"
             name.contains("flash") -> "Gemini 1.5 Flash"
             else -> "Cipher Ultra"
         }
-        
+
         saveSessionsToDisk()
     }
 
@@ -229,7 +229,11 @@ class MainViewModel @Inject constructor(
     fun deleteSession(sessionId: String) {
         val updatedList = _sessions.value.filter { it.id != sessionId }
         _sessions.value = updatedList
-        storageManager.saveSessions(updatedList)
+        
+        // FIXED: Run heavy database operation on IO thread to prevent UI freeze
+        viewModelScope.launch(Dispatchers.IO) {
+            storageManager.saveSessions(updatedList)
+        }
 
         if (_currentSessionId.value == sessionId) {
             if (updatedList.isNotEmpty()) {
@@ -251,8 +255,13 @@ class MainViewModel @Inject constructor(
                 ) 
                 else it 
             }
+            // Update UI State immediately (Fast)
             _sessions.value = updatedList
-            storageManager.saveSessions(updatedList)
+            
+            // FIXED: Heavy JSON Serialization/Writing moved to Background Thread (IO)
+            viewModelScope.launch(Dispatchers.IO) {
+                storageManager.saveSessions(updatedList)
+            }
         }
     }
 
@@ -306,7 +315,8 @@ class MainViewModel @Inject constructor(
 
         // 5. Start Streaming
         viewModelScope.launch {
-            var fullResponse = ""
+            val fullResponse = StringBuilder()
+            var lastUiUpdate = 0L // To track throttling time
 
             aiService.generateContentStream(
                 apiKey = apiKey,
@@ -317,17 +327,27 @@ class MainViewModel @Inject constructor(
             ).collect { result ->
                 when (result) {
                     is StreamResult.Content -> {
-                        fullResponse += result.text
-                        updateLastMessage(fullResponse)
+                        fullResponse.append(result.text)
+                        
+                        // THROTTLING: Only update UI if > 100ms has passed
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastUiUpdate >= 100) {
+                            updateLastMessage(fullResponse.toString())
+                            lastUiUpdate = currentTime
+                        }
                     }
                     is StreamResult.Error -> {
-                        updateLastMessage(fullResponse + "\n\n[Error: ${result.message}]")
+                        fullResponse.append("\n\n[Error: ${result.message}]")
+                        updateLastMessage(fullResponse.toString())
                         _isStreaming.value = false
                         saveSessionsToDisk()
                     }
                     else -> {}
                 }
             }
+            
+            // FINAL UPDATE: Ensure the complete text is shown (in case the last chunk was throttled)
+            updateLastMessage(fullResponse.toString())
             _isStreaming.value = false
             saveSessionsToDisk()
         }
