@@ -79,6 +79,7 @@ class PromptStudioViewModel @Inject constructor(
         """.trimIndent()
 
         viewModelScope.launch {
+            // FIX: Changed ModelName.GEMINI_PRO to ModelName.PRO
             val config = ModelConfig(
                 model = ModelName.FLASH,
                 temperature = 0.7,
