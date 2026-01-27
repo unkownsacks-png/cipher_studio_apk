@@ -4,10 +4,10 @@ import android.speech.tts.TextToSpeech
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
-androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer // FIX: Added Import
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -218,7 +218,7 @@ fun DocIntelScreen(
                             }
                         }
 
-                        // Main Text
+                        // Main Text (FIX: Wrapped in SelectionContainer)
                         SelectionContainer {
                             Text(
                                 text = analysis,
