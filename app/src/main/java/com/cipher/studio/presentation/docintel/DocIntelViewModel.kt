@@ -2,7 +2,7 @@ package com.cipher.studio.presentation.docintel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cipher.studio.data.local.ApiKeyManager // IMPORT ADDED
+import com.cipher.studio.data.local.ApiKeyManager
 import com.cipher.studio.domain.model.ModelConfig
 import com.cipher.studio.domain.model.ModelName
 import com.cipher.studio.domain.service.GenerativeAIService
@@ -13,17 +13,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class DocAnalysisMode {
-    SUMMARY, AUDIT, INSIGHTS
+enum class DocAnalysisMode { 
+    SUMMARY, RISKS, INSIGHTS, 
+    // New Modes
+    CONTRACT_REVIEW, ACADEMIC_PAPER, EMAIL_TONE 
 }
+
+// FEATURE 2: Tabs for organized output
+enum class ResultTab { OVERVIEW, KEY_POINTS, ACTION_ITEMS, RAW }
 
 @HiltViewModel
 class DocIntelViewModel @Inject constructor(
     private val aiService: GenerativeAIService,
-    private val apiKeyManager: ApiKeyManager // FIX 1: Dependency Injection
+    private val apiKeyManager: ApiKeyManager
 ) : ViewModel() {
 
-    // State
     private val _docText = MutableStateFlow("")
     val docText = _docText.asStateFlow()
 
@@ -33,74 +37,140 @@ class DocIntelViewModel @Inject constructor(
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing = _isProcessing.asStateFlow()
 
-    fun updateDocText(text: String) {
-        _docText.value = text
-    }
+    // FEATURE 2: Active Tab State
+    private val _activeTab = MutableStateFlow(ResultTab.OVERVIEW)
+    val activeTab = _activeTab.asStateFlow()
+
+    // FEATURE 4: Sentiment Score (0 to 100)
+    private val _sentimentScore = MutableStateFlow(50)
+    val sentimentScore = _sentimentScore.asStateFlow()
+
+    // FEATURE 5: Extracted Keywords
+    private val _keywords = MutableStateFlow<List<String>>(emptyList())
+    val keywords = _keywords.asStateFlow()
+
+    // FEATURE 7: Q&A Chat State
+    private val _qaQuery = MutableStateFlow("")
+    val qaQuery = _qaQuery.asStateFlow()
+    private val _qaAnswer = MutableStateFlow("")
+    val qaAnswer = _qaAnswer.asStateFlow()
+
+    fun updateDocText(text: String) { _docText.value = text }
+    fun setActiveTab(tab: ResultTab) { _activeTab.value = tab }
+    fun updateQaQuery(text: String) { _qaQuery.value = text }
 
     fun runAnalysis(mode: DocAnalysisMode) {
-        if (_docText.value.isBlank() || _isProcessing.value) return
-
+        if (_docText.value.isBlank()) return
+        
         _isProcessing.value = true
         _analysis.value = ""
+        _keywords.value = emptyList() // Clear previous
+        _sentimentScore.value = 50 // Reset neutral
+        
+        val apiKey = apiKeyManager.getApiKey() ?: return
 
-        // FIX 2: Retrieve API Key
-        val apiKey = apiKeyManager.getApiKey()
-
-        // FIX 3: Validate Key
-        if (apiKey.isNullOrBlank()) {
-            _analysis.value = "## ⚠️ ACCESS DENIED\n\nAPI Key not found. Please navigate to Settings and configure your Gemini API Key to unlock Document Intelligence."
-            _isProcessing.value = false
-            return
-        }
-
-        var prompt = ""
-        when (mode) {
-            DocAnalysisMode.SUMMARY -> prompt = "Provide a comprehensive executive summary. Use headers, bullet points for key takeaways, and a final 'Actionable Verdict'."
-            DocAnalysisMode.AUDIT -> prompt = "Perform a Forensic Audit on this text. Highlight:\n1. Potential Risks\n2. Legal Loopholes\n3. Contradictions\n4. Ambiguous Language."
-            DocAnalysisMode.INSIGHTS -> prompt = "Extract hidden insights, patterns, and actionable intelligence. Identify key entities, sentiment, and implied intent that is not immediately obvious."
-        }
-
-        // Include the text in the prompt context
-        val fullPrompt = "$prompt\n\n--- TARGET DOCUMENT ---\n${_docText.value}"
-
-        // ENHANCED REAL-WORLD SYSTEM INSTRUCTION
-        val systemInstruction = """
-            You are a Senior Document Analyst & Intelligence Officer. 
+        // ADVANCED PROMPT ENGINEERING
+        val systemPrompt = """
+            You are an elite Document Intelligence AI.
+            Analyze the provided text based on the requested mode.
             
-            OUTPUT RULES:
-            1. Format your response in clean Markdown (use ## for headers, **bold** for emphasis).
-            2. Be objective, critical, and extremely detailed.
-            3. If the document contains sensitive PII (Personally Identifiable Information), flag it in a warning block at the top.
-            4. Never hallucinate facts not present in the text.
+            IMPORTANT FORMATTING:
+            1. Return the main analysis in Markdown.
+            2. At the very end, append a JSON-like block for metadata:
+               [[METADATA]]
+               KEYWORDS: key1, key2, key3, key4
+               SENTIMENT: 0-100 (where 0 is negative, 100 is positive)
         """.trimIndent()
 
-        val config = ModelConfig(
-            model = ModelName.PRO, // Pro is better for large context/reasoning
-            temperature = 0.3, // Lower temperature for factual accuracy
-            systemInstruction = systemInstruction
-        )
+        val userPrompt = when(mode) {
+            DocAnalysisMode.SUMMARY -> "Provide a comprehensive Executive Summary."
+            DocAnalysisMode.RISKS -> "Identify all Legal Risks, Liabilities, and Red Flags."
+            DocAnalysisMode.INSIGHTS -> "Extract hidden insights, trends, and strategic value."
+            DocAnalysisMode.CONTRACT_REVIEW -> "Review this contract. Highlight missing clauses and unfair terms."
+            DocAnalysisMode.ACADEMIC_PAPER -> "Simplify this academic paper. Explain methodology and conclusion."
+            DocAnalysisMode.EMAIL_TONE -> "Analyze the tone of this email. Suggest improvements for clarity/politeness."
+        }
+
+        val fullPrompt = "TEXT:\n${_docText.value}\n\nTASK: $userPrompt"
 
         viewModelScope.launch {
-            // FIX 4: Use validated apiKey
+            val config = ModelConfig(
+                model = ModelName.GEMINI_PRO,
+                temperature = 0.3, // Low temp for accuracy
+                systemInstruction = systemPrompt
+            )
+
+            var fullResponse = ""
+
             aiService.generateContentStream(
                 apiKey = apiKey,
                 prompt = fullPrompt,
                 attachments = emptyList(),
-                history = emptyList(), // Single shot analysis
+                history = emptyList(),
                 config = config
             ).collect { result ->
-                when (result) {
+                when(result) {
                     is StreamResult.Content -> {
-                        _analysis.value += result.text
+                        fullResponse += result.text
+                        // Filter out metadata from live display
+                        if (!fullResponse.contains("[[METADATA]]")) {
+                            _analysis.value = fullResponse
+                        } else {
+                            val parts = fullResponse.split("[[METADATA]]")
+                            _analysis.value = parts[0].trim()
+                            parseMetadata(parts[1])
+                        }
                     }
                     is StreamResult.Error -> {
-                        _analysis.value = "## 🛑 System Error\n\nFailed to process document.\nError Details: ${result.message}"
+                        _analysis.value = "Error: ${result.message}"
                         _isProcessing.value = false
                     }
-                    is StreamResult.Metadata -> { /* Ignore */ }
+                    else -> {}
                 }
             }
             _isProcessing.value = false
+        }
+    }
+
+    // FEATURE 7: Ask Question about Doc
+    fun askQuestion() {
+        if (_qaQuery.value.isBlank() || _docText.value.isBlank()) return
+        
+        viewModelScope.launch {
+            val apiKey = apiKeyManager.getApiKey() ?: return
+            val prompt = "CONTEXT:\n${_docText.value}\n\nQUESTION: ${_qaQuery.value}\n\nAnswer briefly based ONLY on the context."
+            
+            val config = ModelConfig(model = ModelName.GEMINI_PRO, temperature = 0.1)
+            
+            aiService.generateContentStream(
+                apiKey = apiKey,
+                prompt = prompt,
+                attachments = emptyList(),
+                history = emptyList(),
+                config = config
+            ).collect { result ->
+                if (result is StreamResult.Content) {
+                    _qaAnswer.value += result.text
+                }
+            }
+        }
+    }
+
+    private fun parseMetadata(meta: String) {
+        try {
+            val lines = meta.lines()
+            lines.forEach { line ->
+                if (line.contains("KEYWORDS:")) {
+                    val keys = line.substringAfter("KEYWORDS:").split(",").map { it.trim() }
+                    _keywords.value = keys.take(5)
+                }
+                if (line.contains("SENTIMENT:")) {
+                    val score = line.substringAfter("SENTIMENT:").trim().toIntOrNull() ?: 50
+                    _sentimentScore.value = score
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore parse errors
         }
     }
 }
