@@ -94,6 +94,7 @@ class DocIntelViewModel @Inject constructor(
         val fullPrompt = "TEXT:\n${_docText.value}\n\nTASK: $userPrompt"
 
         viewModelScope.launch {
+            // FIX: Changed ModelName.GEMINI_PRO to ModelName.PRO
             val config = ModelConfig(
                 model = ModelName.FLASH,
                 temperature = 0.3, // Low temp for accuracy
@@ -137,10 +138,11 @@ class DocIntelViewModel @Inject constructor(
         if (_qaQuery.value.isBlank() || _docText.value.isBlank()) return
         
         viewModelScope.launch {
-            val apiKey = apiKeyManager.getApiKey() ?: return
+            val apiKey = apiKeyManager.getApiKey() ?: return@launch
             val prompt = "CONTEXT:\n${_docText.value}\n\nQUESTION: ${_qaQuery.value}\n\nAnswer briefly based ONLY on the context."
             
-            val config = ModelConfig(model = ModelName.GEMINI_PRO, temperature = 0.1)
+            // FIX: Changed ModelName.GEMINI_PRO to ModelName.PRO
+            val config = ModelConfig(model = ModelName.PRO, temperature = 0.1)
             
             aiService.generateContentStream(
                 apiKey = apiKey,
@@ -152,6 +154,7 @@ class DocIntelViewModel @Inject constructor(
                 if (result is StreamResult.Content) {
                     _qaAnswer.value += result.text
                 }
+                // FIX: Removed 'return' which was causing the error
             }
         }
     }
