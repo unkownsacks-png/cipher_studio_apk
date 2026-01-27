@@ -8,6 +8,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,16 +20,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged // FIXED: Added critical import
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -43,15 +45,19 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 // --- ELITE THEME COLORS ---
 val DeepSpaceBlack = Color(0xFF020617)
 val CyberGreen = Color(0xFF10b981)
 val CyberGreenGlow = Color(0xFF34d399)
-val GlassSurface = Color(0xFF0F172A).copy(alpha = 0.7f)
+val GlassSurface = Color(0xFF0F172A).copy(alpha = 0.65f) // Slightly more transparent for effect
 val TextPrimary = Color(0xFFF1F5F9)
-val TextSecondary = Color(0xFF64748B)
+val TextSecondary = Color(0xFF94A3B8)
+val ErrorRed = Color(0xFFEF4444)
 
 @Composable
 fun EliteAuthScreen(
@@ -61,6 +67,7 @@ fun EliteAuthScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
 
     // ViewModel State
     val email by viewModel.email.collectAsState()
@@ -71,20 +78,24 @@ fun EliteAuthScreen(
 
     // Animation States
     var startAnimation by remember { mutableStateOf(false) }
-    
-    // FEATURE: Error Shake Animation
+    var showSuccessBlast by remember { mutableStateOf(false) }
+
+    // FEATURE 1: Error Shake & Haptic
     val shakeOffset = remember { Animatable(0f) }
     
+    // FEATURE 4: Interactive Particles State
+    var touchPosition by remember { mutableStateOf(Offset.Zero) }
+    val particles = remember { List(20) { Particle() } }
+
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
             // Shake Effect
-            for (i in 0..3) {
-                shakeOffset.animateTo(10f, animationSpec = tween(50))
-                shakeOffset.animateTo(-10f, animationSpec = tween(50))
+            repeat(3) {
+                shakeOffset.animateTo(15f, animationSpec = tween(50))
+                shakeOffset.animateTo(-15f, animationSpec = tween(50))
             }
             shakeOffset.animateTo(0f)
-            
             Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             viewModel.clearError()
         }
@@ -94,15 +105,20 @@ fun EliteAuthScreen(
         startAnimation = true
     }
 
+    // FEATURE 6: Success Blast Logic
     LaunchedEffect(isLoginSuccess) {
-        if (isLoginSuccess) onLoginSuccess()
+        if (isLoginSuccess) {
+            showSuccessBlast = true
+            delay(800) // Wait for blast animation
+            onLoginSuccess()
+        }
     }
 
-    // 2. ALIVE NEBULA BACKGROUND
+    // FEATURE 1: Parallax Nebula Background
     val infiniteTransition = rememberInfiniteTransition(label = "nebula")
-    val nebulaOffset by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 1000f,
-        animationSpec = infiniteRepeatable(tween(20000, easing = LinearEasing), RepeatMode.Reverse),
+    val nebulaMove by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 200f,
+        animationSpec = infiniteRepeatable(tween(15000, easing = LinearEasing), RepeatMode.Reverse),
         label = "offset"
     )
 
@@ -110,76 +126,83 @@ fun EliteAuthScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DeepSpaceBlack)
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    touchPosition = offset
+                    // Trigger particle burst on tap (simulated by state update)
+                }
+            }
     ) {
-        // Dynamic Background Canvas
+        // 2. Dynamic Background Canvas (Nebula & Particles)
         Canvas(modifier = Modifier.fillMaxSize()) {
+            // Nebula 1
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF064e3b).copy(alpha = 0.4f), Color.Transparent),
-                    center = Offset(size.width * 0.2f + (nebulaOffset * 0.1f), size.height * 0.2f),
-                    radius = size.width * 0.9f
+                    colors = listOf(Color(0xFF064e3b).copy(alpha = 0.3f), Color.Transparent),
+                    center = Offset(size.width * 0.2f + nebulaMove, size.height * 0.3f),
+                    radius = size.width * 1.2f
                 )
             )
+            // Nebula 2
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF1e1b4b).copy(alpha = 0.3f), Color.Transparent),
-                    center = Offset(size.width * 0.8f - (nebulaOffset * 0.1f), size.height * 0.9f),
-                    radius = size.width * 0.8f
+                    colors = listOf(Color(0xFF1e1b4b).copy(alpha = 0.25f), Color.Transparent),
+                    center = Offset(size.width * 0.8f - nebulaMove, size.height * 0.8f),
+                    radius = size.width * 1.0f
                 )
             )
+
+            // FEATURE 4: Interactive Particles
+            particles.forEach { particle ->
+                // Simple physics simulation for visual flair
+                val x = (particle.initialX + nebulaMove * particle.speed) % size.width
+                val y = (particle.initialY + nebulaMove * particle.speed * 0.5f) % size.height
+                
+                drawCircle(
+                    color = CyberGreen.copy(alpha = particle.alpha),
+                    radius = particle.size,
+                    center = Offset(x, y)
+                )
+            }
         }
 
-        // Main Content
-        Column(
+        // Main Content Container
+        Box(
             modifier = Modifier
-                .align(Alignment.Center)
-                .padding(24.dp)
-                .fillMaxWidth()
-                .offset(x = shakeOffset.value.dp), // Apply Shake
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .offset(x = shakeOffset.value.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // 3. FROSTED GLASS CARD
+            // 3. FROSTED GLASS CARD (Glassmorphism 2.0)
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
+                    .width(360.dp) // Fixed width for cleaner look on tablets
+                    .clip(RoundedCornerShape(32.dp))
                     .background(GlassSurface)
                     .border(
                         width = 1.dp,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.1f),
+                                Color.White.copy(alpha = 0.15f),
                                 Color.Transparent,
                                 Color.White.copy(alpha = 0.05f)
                             )
                         ),
-                        shape = RoundedCornerShape(24.dp)
+                        shape = RoundedCornerShape(32.dp)
                     )
+                    // FEATURE 3: Backdrop Blur Simulation (Visual trick via layer transparency)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    
-                    // 4. STAGGERED ENTRANCE (Logo)
+
+                    // 4. LOGO WITH GLITCH EFFECT
                     AnimatedVisibility(
                         visible = startAnimation,
-                        enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { -40 }
+                        enter = scaleIn(tween(600, easing = OvershootInterpolator(1.2f))) + fadeIn(tween(400))
                     ) {
-                        // FEATURE: Neon Glow Layer (FIXED SHADOW)
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .shadow(
-                                    elevation = 25.dp, 
-                                    shape = CircleShape, 
-                                    spotColor = CyberGreen,
-                                    ambientColor = CyberGreen
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CipherExactLogo(modifier = Modifier.fillMaxSize())
-                        }
+                        GlitchLogo(isLoading = isLoading || showSuccessBlast)
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -187,8 +210,9 @@ fun EliteAuthScreen(
                     // 7. DECRYPTION TEXT EFFECT
                     DecryptionText(
                         targetText = "CIPHER ELITE",
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        visible = startAnimation
+                        modifier = Modifier.padding(bottom = 6.dp),
+                        visible = startAnimation,
+                        color = if(showSuccessBlast) CyberGreen else TextPrimary
                     )
 
                     AnimatedVisibility(
@@ -196,27 +220,26 @@ fun EliteAuthScreen(
                         enter = fadeIn(tween(1000, delayMillis = 300))
                     ) {
                         Text(
-                            text = "SECURE ACCESS TERMINAL",
-                            fontSize = 11.sp,
-                            color = TextSecondary,
+                            text = if(showSuccessBlast) "ACCESS GRANTED" else "SECURE TERMINAL V2.0",
+                            fontSize = 10.sp,
+                            color = if(showSuccessBlast) CyberGreen else TextSecondary,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = 0.2.em,
+                            letterSpacing = 0.3.em,
                             textAlign = TextAlign.Center
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(40.dp))
+                    Spacer(modifier = Modifier.height(48.dp))
 
-                    // 6. MINIMALIST INPUTS
+                    // 6. MINIMALIST INPUTS (Smart Focus)
                     AnimatedVisibility(
-                        visible = startAnimation,
-                        enter = fadeIn(tween(800, delayMillis = 500)) + slideInVertically(tween(800)) { 40 }
+                        visible = startAnimation && !showSuccessBlast,
+                        enter = slideInVertically(tween(600, delayMillis = 500)) { 50 } + fadeIn(tween(600))
                     ) {
                         val emailFocusRequester = remember { FocusRequester() }
-                        
-                        // FEATURE: Auto-Focus
+
                         LaunchedEffect(Unit) {
-                            delay(600) // Wait for enter animation
+                            delay(800) 
                             emailFocusRequester.requestFocus()
                         }
 
@@ -224,22 +247,24 @@ fun EliteAuthScreen(
                             MinimalistTextField(
                                 value = email,
                                 onValueChange = viewModel::onEmailChange,
-                                label = "IDENTITY (EMAIL)",
+                                label = "IDENTITY",
+                                placeholder = "Enter Email",
                                 keyboardType = KeyboardType.Email,
                                 focusRequester = emailFocusRequester,
                                 imeAction = ImeAction.Next
                             )
-                            
-                            Spacer(modifier = Modifier.height(24.dp))
-                            
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
                             MinimalistTextField(
                                 value = key,
                                 onValueChange = viewModel::onKeyChange,
-                                label = "LICENSE KEY",
+                                label = "PASSPHRASE",
+                                placeholder = "••••••••",
                                 keyboardType = KeyboardType.Password,
                                 isPassword = true,
                                 imeAction = ImeAction.Done,
-                                onAction = { // FEATURE: Fast Access
+                                onAction = {
                                     keyboardController?.hide()
                                     viewModel.handleAccess()
                                 }
@@ -249,57 +274,25 @@ fun EliteAuthScreen(
 
                     Spacer(modifier = Modifier.height(40.dp))
 
-                    // 8. INTERACTIVE HAPTIC BUTTON
+                    // 8. INTERACTIVE BUTTON
                     AnimatedVisibility(
-                        visible = startAnimation,
-                        enter = fadeIn(tween(800, delayMillis = 700)) + scaleIn(tween(800))
+                        visible = startAnimation && !showSuccessBlast,
+                        enter = fadeIn(tween(600, delayMillis = 700)) + scaleIn(tween(600))
                     ) {
-                        val buttonScale by animateFloatAsState(if (isLoading) 0.95f else 1f, label = "btnScale")
-                        
-                        Button(
-                            onClick = { 
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.handleAccess() 
-                            },
-                            enabled = !isLoading,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .scale(buttonScale)
-                                .shadow(
-                                    elevation = 15.dp, 
-                                    shape = RoundedCornerShape(12.dp),
-                                    spotColor = CyberGreen.copy(alpha = 0.4f)
-                                ),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberGreen,
-                                disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
-                            )
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = DeepSpaceBlack,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text(
-                                    text = "INITIALIZE SYSTEM",
-                                    color = DeepSpaceBlack,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.1.em
-                                )
+                        LoginButton(
+                            isLoading = isLoading,
+                            onClick = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                viewModel.handleAccess()
                             }
-                        }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // Footer Link
                     AnimatedVisibility(
-                        visible = startAnimation,
+                        visible = startAnimation && !showSuccessBlast,
                         enter = fadeIn(tween(1000, delayMillis = 900))
                     ) {
                         TextButton(
@@ -309,36 +302,104 @@ fun EliteAuthScreen(
                             }
                         ) {
                             Text(
-                                text = "ACQUIRE ACCESS KEY",
-                                color = CyberGreenGlow,
-                                fontSize = 12.sp,
+                                text = "REQUEST ACCESS KEY",
+                                color = CyberGreenGlow.copy(alpha = 0.8f),
+                                fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // 9. STATUS HEARTBEAT
-                    AnimatedVisibility(
-                        visible = startAnimation,
-                        enter = fadeIn(tween(1000, delayMillis = 1100))
-                    ) {
-                        SystemStatusIndicator(isLoading)
-                    }
                 }
+            }
+        }
+
+        // FEATURE 6: LOGIN SUCCESS BLAST OVERLAY
+        if (showSuccessBlast) {
+            val transition = updateTransition(targetState = true, label = "blast")
+            val radius by transition.animateFloat(
+                transitionSpec = { tween(800, easing = FastOutSlowInEasing) },
+                label = "radius"
+            ) { state -> if (state) 2000f else 0f }
+            
+            val alpha by transition.animateFloat(
+                transitionSpec = { tween(800) },
+                label = "alpha"
+            ) { state -> if (state) 0f else 0.8f }
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = CyberGreen.copy(alpha = alpha),
+                    radius = radius,
+                    center = center
+                )
             }
         }
     }
 }
 
-// --- CUSTOM COMPONENTS FOR ELITE FEEL ---
+// --- HELPER CLASSES & COMPONENTS ---
+
+// Simple particle data class
+data class Particle(
+    val initialX: Float = Random.nextFloat() * 1000f,
+    val initialY: Float = Random.nextFloat() * 2000f,
+    val size: Float = Random.nextFloat() * 3f + 1f,
+    val speed: Float = Random.nextFloat() * 0.5f + 0.1f,
+    val alpha: Float = Random.nextFloat() * 0.5f + 0.1f
+)
 
 @Composable
-fun CipherExactLogo(modifier: Modifier) {
+fun GlitchLogo(isLoading: Boolean) {
+    // FEATURE 2: Glitch Effect Logic
+    val infiniteTransition = rememberInfiniteTransition(label = "glitch")
+    
+    // Slight random offset for "glitch" look when loading
+    val offsetX by infiniteTransition.animateFloat(
+        initialValue = -2f, targetValue = 2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glitchX"
+    )
+    
+    // Scale pulse for heartbeat
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(100.dp)
+            .scale(if(isLoading) scale else 1f)
+            .offset(x = if(isLoading) offsetX.dp else 0.dp)
+            .shadow(
+                elevation = 30.dp, 
+                shape = CircleShape, 
+                spotColor = CyberGreen,
+                ambientColor = CyberGreen
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        CipherExactLogo(modifier = Modifier.fillMaxSize())
+        
+        // Glitch Overlay (Optional red/blue shift for true glitch feeling)
+        if(isLoading) {
+             CipherExactLogo(modifier = Modifier.fillMaxSize().offset(x = 2.dp).alpha(0.3f), color = Color.Red)
+             CipherExactLogo(modifier = Modifier.fillMaxSize().offset(x = (-2).dp).alpha(0.3f), color = Color.Blue)
+        }
+    }
+}
+
+@Composable
+fun CipherExactLogo(modifier: Modifier, color: Color = CyberGreen) {
     Canvas(modifier = modifier) {
         val scale = size.minDimension / 100f
-        
         val shieldPath = Path().apply {
             moveTo(75f * scale, 25f * scale)
             lineTo(35f * scale, 25f * scale)
@@ -349,40 +410,21 @@ fun CipherExactLogo(modifier: Modifier) {
 
         drawPath(
             path = shieldPath,
-            color = CyberGreen,
-            style = Stroke(width = 6f * scale, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            color = color,
+            style = Stroke(width = 5f * scale, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
         drawCircle(
-            color = CyberGreen,
+            color = color,
             center = Offset(40f * scale, 50f * scale),
-            radius = 10f * scale,
-            style = Stroke(width = 6f * scale)
+            radius = 8f * scale,
+            style = Stroke(width = 5f * scale)
         )
 
-        drawLine(
-            color = CyberGreen,
-            start = Offset(50f * scale, 50f * scale),
-            end = Offset(85f * scale, 50f * scale),
-            strokeWidth = 6f * scale,
-            cap = StrokeCap.Round
-        )
-
-        drawLine(
-            color = CyberGreen,
-            start = Offset(68f * scale, 50f * scale),
-            end = Offset(68f * scale, 62f * scale),
-            strokeWidth = 6f * scale,
-            cap = StrokeCap.Round
-        )
-
-        drawLine(
-            color = CyberGreen,
-            start = Offset(78f * scale, 50f * scale),
-            end = Offset(78f * scale, 58f * scale),
-            strokeWidth = 6f * scale,
-            cap = StrokeCap.Round
-        )
+        // Data Lines
+        drawLine(color = color, start = Offset(50f * scale, 50f * scale), end = Offset(85f * scale, 50f * scale), strokeWidth = 5f * scale, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(68f * scale, 50f * scale), end = Offset(68f * scale, 62f * scale), strokeWidth = 5f * scale, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(78f * scale, 50f * scale), end = Offset(78f * scale, 58f * scale), strokeWidth = 5f * scale, cap = StrokeCap.Round)
     }
 }
 
@@ -391,6 +433,7 @@ fun MinimalistTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    placeholder: String,
     keyboardType: KeyboardType,
     isPassword: Boolean = false,
     focusRequester: FocusRequester? = null,
@@ -398,77 +441,113 @@ fun MinimalistTextField(
     onAction: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
             color = if (isFocused) CyberGreen else TextSecondary,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.1.em,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+            letterSpacing = 0.15.em,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
-        
+
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             textStyle = androidx.compose.ui.text.TextStyle(
                 color = TextPrimary,
                 fontSize = 16.sp,
-                fontFamily = FontFamily.Monospace
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium
             ),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = keyboardType,
-                imeAction = imeAction
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = { onAction?.invoke() },
-                onGo = { onAction?.invoke() }
-            ),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions(onDone = { onAction?.invoke() }, onGo = { onAction?.invoke() }),
             visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .onFocusChanged { isFocused = it.isFocused } // FIXED: Using Native Import
+                .clip(RoundedCornerShape(12.dp))
+                .background(if(isFocused) Color.White.copy(0.05f) else Color.Transparent) // Highlight on focus
+                .padding(horizontal = 12.dp, vertical = 14.dp)
+                .onFocusChanged { isFocused = it.isFocused }
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty() && !isFocused) {
-                        Text(
-                            text = "...", 
-                            color = TextSecondary.copy(alpha = 0.3f)
-                        )
+                        Text(placeholder, color = TextSecondary.copy(alpha = 0.4f), fontSize = 16.sp)
                     }
                     innerTextField()
                 }
             }
         )
-        
-        val lineWidth by animateFloatAsState(targetValue = if (isFocused) 1f else 0.3f, label = "line")
-        val lineColor = if (isFocused) CyberGreen else TextSecondary.copy(alpha = 0.3f)
-        
+
+        // Animated Bottom Line
+        val lineWidth by animateFloatAsState(targetValue = if (isFocused) 1f else 0f, label = "lineW")
         Box(
             modifier = Modifier
-                .fillMaxWidth(lineWidth)
+                .fillMaxWidth()
                 .height(1.dp)
-                .background(lineColor)
-                .align(if (isFocused) Alignment.CenterHorizontally else Alignment.Start)
-        )
+                .background(TextSecondary.copy(0.2f))
+        ) {
+             Box(
+                modifier = Modifier
+                    .fillMaxWidth(lineWidth)
+                    .height(2.dp) // Thicker when active
+                    .background(CyberGreen)
+            )
+        }
     }
 }
 
 @Composable
-fun DecryptionText(targetText: String, modifier: Modifier = Modifier, visible: Boolean) {
+fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = !isLoading,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(54.dp)
+            .shadow(
+                elevation = 20.dp, 
+                shape = RoundedCornerShape(16.dp),
+                spotColor = CyberGreen.copy(alpha = 0.5f)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = CyberGreen,
+            disabledContainerColor = CyberGreen.copy(alpha = 0.5f)
+        )
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = DeepSpaceBlack,
+                strokeWidth = 3.dp
+            )
+        } else {
+            Text(
+                text = "INITIALIZE SYSTEM",
+                color = DeepSpaceBlack,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.1.em
+            )
+        }
+    }
+}
+
+@Composable
+fun DecryptionText(targetText: String, modifier: Modifier = Modifier, visible: Boolean, color: Color) {
     var displayText by remember { mutableStateOf("") }
-    val characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    val characters = "01010101XYZ#@!"
 
     LaunchedEffect(visible) {
         if (visible) {
             for (i in 1..targetText.length) {
-                repeat(3) {
+                repeat(2) {
                     displayText = targetText.take(i - 1) + characters.random()
-                    delay(50)
+                    delay(30) // Faster decryption
                 }
                 displayText = targetText.take(i)
             }
@@ -477,43 +556,11 @@ fun DecryptionText(targetText: String, modifier: Modifier = Modifier, visible: B
 
     Text(
         text = displayText,
-        color = TextPrimary,
-        fontSize = 28.sp,
+        color = color,
+        fontSize = 26.sp,
         fontWeight = FontWeight.Black,
         letterSpacing = 0.15.em,
         modifier = modifier,
         textAlign = TextAlign.Center
     )
-}
-
-@Composable
-fun SystemStatusIndicator(isLoading: Boolean) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
-        label = "alpha"
-    )
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(if (isLoading) Color(0xFFF59E0B) else CyberGreen.copy(alpha = alpha))
-                .shadow(
-                    elevation = 8.dp, 
-                    shape = CircleShape,
-                    spotColor = if (isLoading) Color(0xFFF59E0B) else CyberGreen
-                )
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = if (isLoading) "ESTABLISHING CONNECTION..." else "SYSTEM ONLINE :: READY",
-            color = if (isLoading) Color(0xFFF59E0B) else TextSecondary,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.15.em
-        )
-    }
 }
