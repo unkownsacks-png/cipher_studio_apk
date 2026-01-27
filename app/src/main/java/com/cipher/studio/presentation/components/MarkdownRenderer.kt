@@ -45,12 +45,32 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FLATTENED ARCHITECTURE)
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FIXED & FLATTENED)
  * 
- * NOTE: This file now exposes individual components (EliteCodeBlock, MarkdownHeader, etc.)
- * so they can be rendered directly inside the main LazyColumn in ChatView.
- * This completely eliminates "Nested Scroll" crashes and rendering lag.
+ * FIX 1: Restored 'MarkdownRenderer' function for backward compatibility with ChatMessageItem.kt
+ * FIX 2: Exposed individual components for MainScreen flattening logic.
  */
+
+// --- COMPATIBILITY WRAPPER (Fixes ChatMessageItem.kt error) ---
+@Composable
+fun MarkdownRenderer(
+    content: String,
+    theme: Theme,
+    isStreaming: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val blocks = parseMarkdownBlocks(content)
+
+    // Using Column ensures no "Nested Scroll" crash if used inside another LazyColumn
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        blocks.forEach { block ->
+            AiBlockRenderer(block, isDark = theme == Theme.DARK)
+        }
+    }
+}
 
 // --- DATA STRUCTURES (Exposed for MainScreen) ---
 sealed class MarkdownBlock(val id: String = UUID.randomUUID().toString()) {
@@ -179,7 +199,27 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     return blocks
 }
 
-// --- PUBLIC COMPONENTS (Used directly by ChatView) ---
+// --- SHARED BLOCK RENDERER (Used by both MarkdownRenderer and MainScreen) ---
+@Composable
+fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
+    val theme = if(isDark) Theme.DARK else Theme.LIGHT
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (block) {
+            is MarkdownBlock.Header -> MarkdownHeader(block.text, block.level, theme)
+            is MarkdownBlock.Code -> EliteCodeBlock(block.language, block.content, isDark)
+            is MarkdownBlock.Text -> StyledText(block.content, isDark)
+            is MarkdownBlock.Table -> MarkdownTable(block.rows, isDark)
+            is MarkdownBlock.Quote -> MarkdownQuote(block.content, theme)
+            is MarkdownBlock.ListItem -> MarkdownListItem(block.content, block.isOrdered, theme)
+            is MarkdownBlock.TaskItem -> MarkdownTaskItem(block.content, block.isChecked, theme)
+            is MarkdownBlock.Image -> EliteImage(block.url, block.altText)
+            is MarkdownBlock.Rule -> Divider(color = Color.Gray.copy(0.3f), thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+        }
+    }
+}
+
+// --- PUBLIC COMPONENTS ---
 
 @Composable
 fun MarkdownHeader(text: String, level: Int, theme: Theme) {
