@@ -2,7 +2,7 @@ package com.cipher.studio.presentation.prompt
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cipher.studio.data.local.ApiKeyManager // IMPORT ADDED
+import com.cipher.studio.data.local.ApiKeyManager
 import com.cipher.studio.domain.model.ModelConfig
 import com.cipher.studio.domain.model.ModelName
 import com.cipher.studio.domain.service.GenerativeAIService
@@ -13,13 +13,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+// FEATURE 5: Analysis Badges
+enum class PromptQuality { POOR, OKAY, GREAT, PERFECT }
+
 @HiltViewModel
 class PromptStudioViewModel @Inject constructor(
     private val aiService: GenerativeAIService,
-    private val apiKeyManager: ApiKeyManager // FIX 1: Dependency Injection
+    private val apiKeyManager: ApiKeyManager
 ) : ViewModel() {
 
-    // State
     private val _inputPrompt = MutableStateFlow("")
     val inputPrompt = _inputPrompt.asStateFlow()
 
@@ -32,84 +34,110 @@ class PromptStudioViewModel @Inject constructor(
     private val _isOptimizing = MutableStateFlow(false)
     val isOptimizing = _isOptimizing.asStateFlow()
 
-    // ENHANCED SYSTEM INSTRUCTION: Uses CO-STAR Framework for elite prompting
-    private val systemInstruction = """
-        You are a World-Class Prompt Engineer specializing in LLM optimization.
-        Your goal is to transform basic user inputs into high-performance prompts using the CO-STAR framework (Context, Objective, Style, Tone, Audience, Response).
-        
-        OUTPUT RULES:
-        1. Return the response in two distinct sections separated EXACTLY by "|||SEPARATOR|||".
-        2. Section 1: The Optimized Prompt. It must be ready-to-use, enclosed in clear delimiters (like ###), and utilize Chain-of-Thought prompting where necessary.
-        3. Section 2: Strategy Breakdown. Explain *why* you made changes (e.g., "Added constraints to prevent hallucinations", "Specified output format for parsing").
-        
-        DO NOT include markdown code blocks (```) for the separator, just raw text.
-    """.trimIndent()
+    // FEATURE 5: Quality Analysis
+    private val _quality = MutableStateFlow(PromptQuality.OKAY)
+    val quality = _quality.asStateFlow()
 
-    fun updateInput(text: String) {
-        _inputPrompt.value = text
+    fun updateInput(text: String) { _inputPrompt.value = text }
+    
+    // FEATURE 3: Template Chips Logic
+    fun applyTemplate(template: String) {
+        val base = when(template) {
+            "Coding" -> "Write a Python script to..."
+            "Creative" -> "Write a dystopian story about..."
+            "Business" -> "Draft a professional email to..."
+            "Academic" -> "Summarize the key concepts of..."
+            else -> ""
+        }
+        _inputPrompt.value = base
     }
 
     fun handleOptimize() {
-        if (_inputPrompt.value.isBlank() || _isOptimizing.value) return
-
+        if (_inputPrompt.value.isBlank()) return
+        
         _isOptimizing.value = true
-        _optimizedPrompt.value = ""
+        _optimizedPrompt.value = "" // Clear previous
         _explanation.value = ""
+        
+        val apiKey = apiKeyManager.getApiKey() ?: return
 
-        // FIX 2: Retrieve API Key
-        val apiKey = apiKeyManager.getApiKey()
-
-        // FIX 3: Validate Key
-        if (apiKey.isNullOrBlank()) {
-            _optimizedPrompt.value = "API Key Missing"
-            _explanation.value = "⚠️ SYSTEM ALERT: Please configure your Gemini API Key in the Settings menu to unlock Prompt Studio."
-            _isOptimizing.value = false
-            return
-        }
+        // ADVANCED SYSTEM PROMPT
+        val systemPrompt = """
+            You are a Prompt Engineer Expert. 
+            1. Analyze the user's prompt.
+            2. REWRITE it to be highly detailed, structured, and optimized for LLMs (using personas, constraints, steps).
+            3. Provide a short explanation of WHY you made changes.
+            4. Rate the original prompt (POOR, OKAY, GREAT, PERFECT).
+            
+            Format output as:
+            [RATING]
+            ...
+            [EXPLANATION]
+            ...
+            [OPTIMIZED]
+            ...
+        """.trimIndent()
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.PRO, // Pro model is better for reasoning/instruction following
-                temperature = 0.7, // Balanced creativity
-                systemInstruction = systemInstruction
+                model = ModelName.GEMINI_PRO,
+                temperature = 0.7,
+                systemInstruction = systemPrompt
             )
 
-            var fullText = ""
-
-            // FIX 4: Use validated apiKey
+            // FEATURE 2: Streaming Logic
+            var fullResponse = ""
+            
             aiService.generateContentStream(
                 apiKey = apiKey,
-                prompt = "Optimize this prompt: \"${_inputPrompt.value}\"",
+                prompt = _inputPrompt.value,
                 attachments = emptyList(),
                 history = emptyList(),
                 config = config
             ).collect { result ->
-                when (result) {
+                when(result) {
                     is StreamResult.Content -> {
-                        fullText += result.text
-                        parseResult(fullText)
+                        fullResponse += result.text
+                        parseResponse(fullResponse)
                     }
                     is StreamResult.Error -> {
-                        _explanation.value = "Optimization Failed: ${result.message}"
+                        _explanation.value = "Error: ${result.message}"
                         _isOptimizing.value = false
                     }
-                    is StreamResult.Metadata -> { /* Ignore */ }
+                    else -> {}
                 }
             }
             _isOptimizing.value = false
         }
     }
 
-    private fun parseResult(text: String) {
-        // Split based on the separator defined in the system instruction
-        val parts = text.split("|||SEPARATOR|||")
+    private fun parseResponse(response: String) {
+        // Simple parser to split the AI response into sections
+        try {
+            if (response.contains("[OPTIMIZED]")) {
+                val parts = response.split("[OPTIMIZED]")
+                val prePart = parts[0]
+                val optimizedPart = parts[1]
 
-        if (parts.isNotEmpty()) {
-            _optimizedPrompt.value = parts[0].trim()
-        }
+                _optimizedPrompt.value = optimizedPart.trim()
 
-        if (parts.size > 1) {
-            _explanation.value = parts[1].trim()
+                if (prePart.contains("[EXPLANATION]")) {
+                    val expParts = prePart.split("[EXPLANATION]")
+                    val ratingPart = expParts[0]
+                    _explanation.value = expParts[1].trim()
+                    
+                    // Parse Rating
+                    if (ratingPart.contains("POOR")) _quality.value = PromptQuality.POOR
+                    else if (ratingPart.contains("OKAY")) _quality.value = PromptQuality.OKAY
+                    else if (ratingPart.contains("GREAT")) _quality.value = PromptQuality.GREAT
+                    else if (ratingPart.contains("PERFECT")) _quality.value = PromptQuality.PERFECT
+                }
+            } else {
+                // Fallback if streaming is partial
+                _explanation.value = "Optimizing..."
+            }
+        } catch (e: Exception) {
+            // Ignore parse errors during streaming
         }
     }
 }
