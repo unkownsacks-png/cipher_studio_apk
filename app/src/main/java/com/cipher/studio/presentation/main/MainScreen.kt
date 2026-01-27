@@ -380,7 +380,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
 
                 items(
                     items = history,
-                    key = { it.id } // Performance Optimization
+                    key = { it.id ?: "" } // Performance Optimization
                 ) { message ->
                     ChatMessageItem(
                         msg = message,
