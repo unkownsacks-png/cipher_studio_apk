@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -312,9 +313,10 @@ fun GeminiTopBar(
         }
     }
 }
+
 // --- FLATTENED UI ITEM WRAPPER ---
 sealed class ChatUiItem(val id: String) {
-    data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id)
+    data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
@@ -357,16 +359,21 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
 
             history.forEach { msg ->
+                // Fix potential null ID
+                val safeMsgId = msg.id ?: UUID.randomUUID().toString()
+                
                 if (msg.role == ChatRole.USER) {
                     items.add(ChatUiItem.UserItem(msg))
                 } else {
                     // PARSE AI MESSAGE INTO BLOCKS HERE
-                    val blocks = parseMarkdownBlocks(msg.text)
+                    val textToParse = msg.text ?: ""
+                    val blocks = parseMarkdownBlocks(textToParse)
+                    
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
                         // Empty streaming message placeholder
                     } else {
                         blocks.forEach { block ->
-                            items.add(ChatUiItem.AiBlockItem(block, msg.id))
+                            items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
                     }
                 }
@@ -482,7 +489,7 @@ fun UserMessageBubble(msg: ChatMessage, isDark: Boolean) {
                 .padding(12.dp)
         ) {
             Text(
-                text = msg.text,
+                text = msg.text ?: "",
                 color = MaterialTheme.colorScheme.onPrimary,
                 fontSize = 16.sp
             )
@@ -490,26 +497,6 @@ fun UserMessageBubble(msg: ChatMessage, isDark: Boolean) {
     }
 }
 
-@Composable
-fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
-    // This renders JUST ONE block of the AI message.
-    // It is a direct child of the main LazyColumn, so performance is perfect.
-    val theme = if(isDark) Theme.DARK else Theme.LIGHT
-    
-    Column(modifier = Modifier.fillMaxWidth()) {
-        when (block) {
-            is MarkdownBlock.Header -> MarkdownHeader(block.text, block.level, theme)
-            is MarkdownBlock.Code -> EliteCodeBlock(block.language, block.content, isDark)
-            is MarkdownBlock.Text -> StyledText(block.content, isDark)
-            is MarkdownBlock.Table -> MarkdownTable(block.rows, isDark)
-            is MarkdownBlock.Quote -> MarkdownQuote(block.content, theme)
-            is MarkdownBlock.ListItem -> MarkdownListItem(block.content, block.isOrdered, theme)
-            is MarkdownBlock.TaskItem -> MarkdownTaskItem(block.content, block.isChecked, theme)
-            is MarkdownBlock.Image -> EliteImage(block.url, block.altText)
-            is MarkdownBlock.Rule -> Divider(color = Color.Gray.copy(0.3f), thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
-        }
-    }
-}
 // --- UPDATED: SMART INPUT BAR (With Waveform & Typewriter) ---
 @Composable
 fun GeminiSmartInputBar(
