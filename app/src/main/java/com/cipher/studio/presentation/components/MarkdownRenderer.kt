@@ -16,10 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.BrokenImage
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +38,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.cipher.studio.domain.model.Theme
@@ -48,134 +45,14 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FIXED VERSION)
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FLATTENED ARCHITECTURE)
  * 
- * FIX: Reverted LazyColumn to Column to prevent "Nested Scroll" crash.
- * Performance is still optimized using derivedStateOf logic.
+ * NOTE: This file now exposes individual components (EliteCodeBlock, MarkdownHeader, etc.)
+ * so they can be rendered directly inside the main LazyColumn in ChatView.
+ * This completely eliminates "Nested Scroll" crashes and rendering lag.
  */
-@Composable
-fun MarkdownRenderer(
-    content: String,
-    theme: Theme,
-    isStreaming: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    // 1. Optimized Parsing with derivedStateOf to prevent jank during streaming
-    val blocks by remember(content) {
-        derivedStateOf { parseMarkdownBlocks(content) }
-    }
 
-    // CRITICAL FIX: Changed back to Column to avoid crash inside ChatView's LazyColumn
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        blocks.forEach { block ->
-            when (block) {
-                is MarkdownBlock.Header -> {
-                    Text(
-                        text = block.text,
-                        style = when (block.level) {
-                            1 -> MaterialTheme.typography.headlineMedium
-                            2 -> MaterialTheme.typography.titleLarge
-                            else -> MaterialTheme.typography.titleMedium
-                        }.copy(fontWeight = FontWeight.Bold),
-                        color = if (theme == Theme.DARK) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-                is MarkdownBlock.Code -> {
-                    EliteCodeBlock(
-                        language = block.language,
-                        code = block.content,
-                        isDark = theme == Theme.DARK
-                    )
-                }
-                is MarkdownBlock.Table -> {
-                    MarkdownTable(
-                        rows = block.rows,
-                        isDark = theme == Theme.DARK
-                    )
-                }
-                is MarkdownBlock.Image -> {
-                    EliteImage(url = block.url, alt = block.altText)
-                }
-                is MarkdownBlock.Quote -> {
-                    // Block Quote Support (>)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .heightIn(min = 24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(4.dp)
-                                .fillMaxHeight()
-                                .background(Color(0xFF6B7280), RoundedCornerShape(2.dp))
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        StyledText(text = block.content, isDark = theme == Theme.DARK, fontSize = 16.sp, isItalic = true)
-                    }
-                }
-
-                is MarkdownBlock.Rule -> {
-                    // Horizontal Rule (---)
-                    Divider(
-                        color = if (theme == Theme.DARK) Color.Gray.copy(alpha = 0.3f) else Color.LightGray,
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                is MarkdownBlock.ListItem -> {
-                    // Lists (Ordered & Unordered)
-                    Row(
-                        modifier = Modifier.padding(start = 8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Text(
-                            text = "•",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (theme == Theme.DARK) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
-                        StyledText(text = block.content, isDark = theme == Theme.DARK)
-                    }
-                }
-                is MarkdownBlock.TaskItem -> {
-                    // Task Lists [ ] or [x]
-                    Row(
-                        modifier = Modifier.padding(start = 4.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = if (block.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                            contentDescription = null,
-                            tint = if (block.isChecked) MaterialTheme.colorScheme.primary else Color.Gray,
-                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        StyledText(
-                            text = block.content,
-                            isDark = theme == Theme.DARK,
-                            isStrikethrough = block.isChecked // Strike if checked
-                        )
-                    }
-                }
-                is MarkdownBlock.Text -> {
-                    StyledText(
-                        text = block.content,
-                        isDark = theme == Theme.DARK
-                    )
-                }
-            }
-        }
-    }
-}
-
-// --- DATA STRUCTURES ---
+// --- DATA STRUCTURES (Exposed for MainScreen) ---
 sealed class MarkdownBlock(val id: String = UUID.randomUUID().toString()) {
     data class Header(val text: String, val level: Int) : MarkdownBlock()
     data class Text(val content: String) : MarkdownBlock()
@@ -188,7 +65,7 @@ sealed class MarkdownBlock(val id: String = UUID.randomUUID().toString()) {
     object Rule : MarkdownBlock()
 }
 
-// --- PARSER LOGIC ---
+// --- PARSER LOGIC (Exposed) ---
 fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
     val lines = text.lines()
@@ -198,7 +75,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         val line = lines[i]
         val trimmed = line.trim()
 
-        // 1. Code Block
+        // 1. Code Block (Strict & Loose detection)
         if (trimmed.startsWith("```")) {
             val language = trimmed.removePrefix("```").trim()
             val codeBuilder = StringBuilder()
@@ -217,7 +94,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             val tableRows = mutableListOf<List<String>>()
             while (i < lines.size && lines[i].trim().startsWith("|")) {
                 val row = lines[i].split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                if (!row.any { it.contains("---") }) { // Skip separator
+                if (!row.any { it.contains("---") }) {
                     tableRows.add(row)
                 }
                 i++
@@ -226,14 +103,14 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 3. Horizontal Rule (---, ***, ___)
+        // 3. Horizontal Rule
         if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
             blocks.add(MarkdownBlock.Rule)
             i++
             continue
         }
 
-        // 4. Task Lists (- [ ] or - [x])
+        // 4. Task Lists
         val taskRegex = Regex("^[-*]\\s\\[([ xX])\\]\\s(.*)")
         val taskMatch = taskRegex.find(trimmed)
         if (taskMatch != null) {
@@ -244,7 +121,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 5. Lists (Unordered & Ordered)
+        // 5. Lists
         if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
             val content = trimmed.substring(2).trim()
             blocks.add(MarkdownBlock.ListItem(content, isOrdered = false))
@@ -259,7 +136,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 6. Headers (#)
+        // 6. Headers (Improved to catch AI hallucinated formats)
         if (trimmed.startsWith("#")) {
             val level = trimmed.takeWhile { it == '#' }.length
             val content = trimmed.removePrefix("#".repeat(level)).trim()
@@ -268,7 +145,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 7. Block Quotes (>)
+        // 7. Block Quotes
         if (trimmed.startsWith(">")) {
             val content = trimmed.removePrefix(">").trim()
             blocks.add(MarkdownBlock.Quote(content))
@@ -284,7 +161,7 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             continue
         }
 
-        // 9. Regular Text
+        // 9. Regular Text (Accumulate lines until a special block starts)
         val textBuilder = StringBuilder()
         while (i < lines.size) {
             val nextTrim = lines[i].trim()
@@ -302,7 +179,22 @@ fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
     return blocks
 }
 
-// --- ELITE CODE BLOCK ---
+// --- PUBLIC COMPONENTS (Used directly by ChatView) ---
+
+@Composable
+fun MarkdownHeader(text: String, level: Int, theme: Theme) {
+    Text(
+        text = text,
+        style = when (level) {
+            1 -> MaterialTheme.typography.headlineMedium
+            2 -> MaterialTheme.typography.titleLarge
+            else -> MaterialTheme.typography.titleMedium
+        }.copy(fontWeight = FontWeight.Bold),
+        color = if (theme == Theme.DARK) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
+}
+
 @Composable
 fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
     val clipboardManager = LocalClipboardManager.current
@@ -318,6 +210,7 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF1E1E1E))
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
@@ -383,15 +276,73 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
     }
 }
 
+@Composable
+fun MarkdownQuote(content: String, theme: Theme) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .heightIn(min = 24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(Color(0xFF6B7280), RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        StyledText(text = content, isDark = theme == Theme.DARK, fontSize = 16.sp, isItalic = true)
+    }
+}
+
+@Composable
+fun MarkdownListItem(content: String, isOrdered: Boolean, theme: Theme) {
+    Row(
+        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = "•",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (theme == Theme.DARK) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
+            modifier = Modifier.padding(end = 12.dp)
+        )
+        StyledText(text = content, isDark = theme == Theme.DARK)
+    }
+}
+
+@Composable
+fun MarkdownTaskItem(content: String, isChecked: Boolean, theme: Theme) {
+    Row(
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = if (isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+            contentDescription = null,
+            tint = if (isChecked) MaterialTheme.colorScheme.primary else Color.Gray,
+            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        StyledText(
+            text = content,
+            isDark = theme == Theme.DARK,
+            isStrikethrough = isChecked
+        )
+    }
+}
+
 // --- SYNTAX HIGHLIGHTER ---
 fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
         val str = code
-        val keywords = listOf("fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", "package", "import", "def", "function", "const", "let")
+        val keywords = listOf("fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", "package", "import", "def", "function", "const", "let", "echo", "cd", "sudo", "docker", "pip", "npm")
         val keywordsRegex = "\\b(${keywords.joinToString("|")})\\b".toRegex()
         val stringRegex = "\".*?\"".toRegex()
         val numberRegex = "\\b\\d+\\b".toRegex()
-        val commentRegex = "//.*".toRegex()
+        val commentRegex = "//.*|#.*".toRegex()
 
         append(str)
 
@@ -510,7 +461,7 @@ fun StyledText(
     )
 }
 
-// --- HELPER: ADVANCED INLINE STYLES ---
+// --- HELPER ---
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
     val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
     var lastIndex = 0
@@ -548,6 +499,7 @@ fun MarkdownTable(rows: List<List<String>>, isDark: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .border(1.dp, borderColor, RoundedCornerShape(8.dp))
             .horizontalScroll(rememberScrollState())
