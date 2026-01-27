@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
+import android.view.animation.OvershootInterpolator
 
 // --- ELITE THEME COLORS ---
 val DeepSpaceBlack = Color(0xFF020617)
