@@ -3,10 +3,10 @@ package com.cipher.studio.presentation.prompt
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer // FIX: Added Import
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -109,6 +109,7 @@ fun PromptStudioScreen(
                         containerColor = if(isDark) Color(0xFF1E293B) else Color.White,
                         labelColor = textColor
                     ),
+                    // FIX: Changed BorderStroke to suggestionChipBorder
                     border = SuggestionChipDefaults.suggestionChipBorder(
                         borderColor = if(isDark) Color.White.copy(0.1f) else Color.Gray.copy(0.2f)
                     ),
@@ -248,6 +249,7 @@ fun PromptStudioScreen(
                         }
 
                         // Content (Typewriter Effect managed by State changes)
+                        // FIX: Added SelectionContainer
                         SelectionContainer {
                             Text(
                                 text = optimizedPrompt,
