@@ -95,7 +95,7 @@ class DocIntelViewModel @Inject constructor(
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.GEMINI_PRO,
+                model = ModelName.FLASH,
                 temperature = 0.3, // Low temp for accuracy
                 systemInstruction = systemPrompt
             )
