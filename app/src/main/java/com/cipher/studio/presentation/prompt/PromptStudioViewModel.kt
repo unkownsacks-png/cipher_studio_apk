@@ -80,7 +80,7 @@ class PromptStudioViewModel @Inject constructor(
 
         viewModelScope.launch {
             val config = ModelConfig(
-                model = ModelName.GEMINI_PRO,
+                model = ModelName.FLASH,
                 temperature = 0.7,
                 systemInstruction = systemPrompt
             )
