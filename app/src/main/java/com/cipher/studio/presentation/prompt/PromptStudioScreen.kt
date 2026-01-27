@@ -212,7 +212,7 @@ fun PromptStudioScreen(
                             .background(if(isDark) Color(0xFF1E293B) else Color(0xFFEFF6FF))
                             .padding(16.dp)
                     ) {
-                        Row(crossAxisAlignment = Alignment.Start) {
+                        Row(horizontalAlignment = Alignment.Start) {
                             Icon(Icons.Rounded.Lightbulb, null, tint = Color(0xFFF59E0B), modifier = Modifier.padding(top = 2.dp).size(18.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
