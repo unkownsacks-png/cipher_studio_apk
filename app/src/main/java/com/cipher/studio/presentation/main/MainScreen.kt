@@ -313,7 +313,7 @@ fun GeminiTopBar(
     }
 }
 
-// --- CHAT VIEW (Updated with Suggestions & Spacing) ---
+// --- CHAT VIEW (FIXED: Smart Auto-Scroll with Content Key) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -322,7 +322,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val attachments by viewModel.attachments.collectAsState()
     val isExpanded by viewModel.isInputExpanded.collectAsState()
     val isVoiceActive by viewModel.isVoiceActive.collectAsState()
-    
+
     val suggestions = viewModel.suggestionChips
 
     val listState = rememberLazyListState()
@@ -339,8 +339,26 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    LaunchedEffect(history.size, isStreaming) {
-        if (history.isNotEmpty()) listState.animateScrollToItem(history.size - 1)
+    // FIXED: Now observing 'lastMessageContent' to scroll while AI is typing
+    val lastMessageContent = history.lastOrNull()?.text ?: ""
+
+    LaunchedEffect(history.size, isStreaming, lastMessageContent) {
+        if (history.isNotEmpty()) {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            
+            // Check if user is near the bottom (within 2-3 items)
+            val isNearBottom = lastVisibleIndex >= (totalItems - 3)
+            
+            val lastMessage = history.last()
+            val isUserMessage = lastMessage.role == ChatRole.USER
+
+            // Scroll if user just sent a message OR if they are already reading at the bottom
+            if (isUserMessage || isNearBottom) {
+                listState.animateScrollToItem(history.size - 1)
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -360,7 +378,10 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                     }
                 }
 
-                items(history) { message ->
+                items(
+                    items = history,
+                    key = { it.id } // Performance Optimization
+                ) { message ->
                     ChatMessageItem(
                         msg = message,
                         isDark = isDark,
@@ -422,7 +443,6 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
     }
 }
-
 // --- UPDATED: SMART INPUT BAR (With Waveform & Typewriter) ---
 @Composable
 fun GeminiSmartInputBar(
@@ -561,7 +581,7 @@ fun GeminiSmartInputBar(
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
-                    
+
                     BasicTextField(
                         value = prompt,
                         onValueChange = onPromptChange,
@@ -621,7 +641,7 @@ fun GeminiSmartInputBar(
 @Composable
 fun VoiceWaveform() {
     val infiniteTransition = rememberInfiniteTransition(label = "wave")
-    
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -657,28 +677,28 @@ fun TypewriterPlaceholder(isExpanded: Boolean) {
         "Explain Quantum Physics...",
         "Generate a business plan..."
     )
-    
+
     var displayedText by remember { mutableStateOf("") }
     var hintIndex by remember { mutableIntStateOf(0) }
-    
+
     LaunchedEffect(Unit) {
         while (true) {
             val targetText = hints[hintIndex]
-            
+
             // Type out
             for (i in 1..targetText.length) {
                 displayedText = targetText.take(i)
                 delay(50)
             }
-            
+
             delay(2000) // Wait
-            
+
             // Delete
             for (i in targetText.length downTo 0) {
                 displayedText = targetText.take(i)
                 delay(30)
             }
-            
+
             delay(500)
             hintIndex = (hintIndex + 1) % hints.size
         }
@@ -722,9 +742,9 @@ fun GreetingHeader() {
             fontWeight = FontWeight.Bold,
             color = pastelGreen 
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "Ready to build something extraordinary?",
             style = MaterialTheme.typography.headlineSmall,
