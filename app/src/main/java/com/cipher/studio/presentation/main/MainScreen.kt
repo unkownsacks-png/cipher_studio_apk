@@ -24,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -32,11 +31,9 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Fullscreen
-import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,11 +70,12 @@ import com.cipher.studio.presentation.dataanalyst.DataAnalystScreen
 import com.cipher.studio.presentation.docintel.DocIntelScreen
 import com.cipher.studio.presentation.prompt.PromptStudioScreen
 import com.cipher.studio.presentation.visionhub.VisionHubScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.UUID
-import kotlin.random.Random
 
 // --- ENTRY POINT ---
 @Composable
@@ -292,19 +290,17 @@ fun GeminiTopBar(currentView: ViewMode, modelName: String, onMenuClick: () -> Un
     }
 }
 
-// --- FLATTENED UI ITEM WRAPPER ---
+// --- FLATTENED UI ITEM WRAPPER (Critical for Performance) ---
 sealed class ChatUiItem(val id: String) {
-    // FIX: IDs are now deterministic based on content hash if ID is missing.
-    // This prevents random ID generation which caused the LazyColumn crash.
-    data class UserItem(val msg: ChatMessage, val stableId: String) : ChatUiItem(stableId)
+    data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
-    data class AiFooterItem(val msg: ChatMessage, val stableId: String) : ChatUiItem("${stableId}_footer")
+    data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer")
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
     data class Suggestions(val idVal: String = "suggestions") : ChatUiItem(idVal)
 }
 
-// --- CHAT VIEW (CRASH-PROOF & OPTIMIZED) ---
+// --- CHAT VIEW (THE ENGINE - ASYNC EDITION) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -325,9 +321,13 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    // --- CRITICAL FIX: DETERMINISTIC IDs ---
-    val flatItems by remember(history, isStreaming) {
-        derivedStateOf {
+    // --- [THE ULTIMATE FIX: ASYNC PROCESSING] ---
+    // Instead of doing heavy parsing on the main thread (derivedStateOf),
+    // we use 'produceState' with 'Dispatchers.Default' (Background Thread).
+    // This ensures the UI NEVER freezes, no matter how complex the markdown is.
+    val flatItems by produceState<List<ChatUiItem>>(initialValue = emptyList(), key1 = history, key2 = isStreaming) {
+        // Switch to Background Thread for Heavy Calculation
+        withContext(Dispatchers.Default) {
             val items = mutableListOf<ChatUiItem>()
 
             if (history.isEmpty()) {
@@ -335,50 +335,52 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 items.add(ChatUiItem.Suggestions())
             }
 
-            history.forEachIndexed { index, msg ->
-                // FIX: Generate a STABLE ID. 
-                // If msg.id is null, use hash of text + index. NEVER use UUID.randomUUID() here.
-                val safeMsgId = msg.id ?: "msg_${msg.text.hashCode()}_$index"
-                
+            history.forEach { msg ->
+                val safeMsgId = msg.id ?: UUID.randomUUID().toString()
+
                 if (msg.role == ChatRole.USER) {
-                    items.add(ChatUiItem.UserItem(msg, safeMsgId))
+                    items.add(ChatUiItem.UserItem(msg))
                 } else {
+                    // HEAVY LIFTING HAPPENS HERE (OFF THE UI THREAD)
                     val textToParse = msg.text ?: ""
-                    val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
                     
+                    // Optimization: If it's a huge text, we don't want to block the Coroutine either
+                    // but since it's Dispatchers.Default, it's safe.
+                    val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
+
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
-                        // Empty streaming placeholder
+                        // Placeholder
                     } else {
                         blocks.forEach { block ->
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
                     }
-                    
+
                     if (!isStreaming || msg != history.last()) {
-                        items.add(ChatUiItem.AiFooterItem(msg, safeMsgId))
+                        items.add(ChatUiItem.AiFooterItem(msg))
                     }
                 }
             }
             if (isStreaming) {
                 items.add(ChatUiItem.LoadingItem(history.lastOrNull()?.id ?: "stream"))
             }
-            items
+            
+            // Send the calculated list back to the UI
+            value = items
         }
     }
 
-    LaunchedEffect(flatItems.size) {
+    // Smart Auto-Scroll
+    LaunchedEffect(flatItems.size, isStreaming) {
         if (flatItems.isNotEmpty()) {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val isNearBottom = lastVisibleIndex >= (totalItems - 6)
-
-            if (isNearBottom || isStreaming) {
-                // FIX: Wrap in try-catch to prevent rare scroll index crash
-                try {
+            if (totalItems > 0) {
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                val isNearBottom = lastVisibleIndex >= (totalItems - 5) 
+                
+                if (isNearBottom || isStreaming) {
                     listState.animateScrollToItem(flatItems.size - 1)
-                } catch (e: Exception) {
-                    // Ignore transient scroll errors
                 }
             }
         }
@@ -394,7 +396,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             ) {
                 items(
                     items = flatItems,
-                    key = { it.id }, // Now guaranteed stable
+                    key = { it.id }, 
                     contentType = { it::class.simpleName }
                 ) { item ->
                     when (item) {
@@ -404,7 +406,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                             UserMessageBubble(
                                 msg = item.msg, 
                                 isDark = isDark,
-                                onEdit = { viewModel.updatePrompt(it) }
+                                onEdit = { viewModel.updatePrompt(it) } 
                             )
                         }
                         is ChatUiItem.AiBlockItem -> {
@@ -428,6 +430,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
+        // Input Bar Overlay
         Box(
             modifier = Modifier.align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -494,8 +497,8 @@ fun AiMessageFooter(msg: ChatMessage, isDark: Boolean, onCopy: (String) -> Unit,
         IconButton(onClick = { onShare(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Share, "Share", tint = iconTint, modifier = Modifier.size(18.dp)) }
         IconButton(onClick = { onSpeak(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.VolumeUp, "Speak", tint = iconTint, modifier = Modifier.size(18.dp)) }
         Spacer(modifier = Modifier.width(8.dp))
-        IconButton(onClick = { /* Feedback */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp)) }
-        IconButton(onClick = { /* Feedback */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp)) }
     }
 }
 
@@ -745,5 +748,5 @@ fun SidebarItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: 
     }
 }
 
-// Helper
+// Helper Extension
 fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier = if (condition) then(modifier(Modifier)) else this
