@@ -79,13 +79,13 @@ import java.util.Calendar
 import java.util.UUID
 import kotlin.random.Random
 
+// --- ENTRY POINT ---
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     var showSplash by remember { mutableStateOf(true) }
 
-    // Professional Splash Sequence
     LaunchedEffect(Unit) {
         delay(1500)
         showSplash = false
@@ -107,9 +107,7 @@ fun MainScreen(
 @Composable
 fun SplashScreen() {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -120,6 +118,7 @@ fun SplashScreen() {
     }
 }
 
+// --- MAIN SYSTEM SHELL ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CipherEliteSystem(viewModel: MainViewModel) {
@@ -139,8 +138,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var isControlsOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-
-    // Feature: Real Delete Confirmation State
     var sessionToDelete by remember { mutableStateOf<String?>(null) }
 
     // Back Handler
@@ -199,7 +196,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // 1. HEADER (With Model Badge)
                     GeminiTopBar(
                         currentView = currentView,
                         modelName = currentModelName,
@@ -207,7 +203,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                         onSettingsClick = { isControlsOpen = true }
                     )
 
-                    // 2. CONTENT AREA
                     Box(modifier = Modifier.weight(1f)) {
                         AnimatedContent(
                             targetState = currentView,
@@ -228,7 +223,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                     }
                 }
 
-                // 3. RIGHT CONTROL PANEL
                 ControlPanel(
                     config = config,
                     onChange = { viewModel.updateConfig(it) }, 
@@ -240,7 +234,6 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
         }
     }
 
-    // DIALOGS
     if (sessionToDelete != null) {
         AlertDialog(
             onDismissRequest = { sessionToDelete = null },
@@ -256,13 +249,9 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
                         sessionToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete")
-                }
+                ) { Text("Delete") }
             },
-            dismissButton = {
-                TextButton(onClick = { sessionToDelete = null }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { sessionToDelete = null }) { Text("Cancel") } },
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         )
     }
@@ -278,28 +267,17 @@ fun CipherEliteSystem(viewModel: MainViewModel) {
     }
 }
 
-// --- HEADER (Updated with Model Badge) ---
+// --- HEADER ---
 @Composable
-fun GeminiTopBar(
-    currentView: ViewMode,
-    modelName: String,
-    onMenuClick: () -> Unit,
-    onSettingsClick: () -> Unit
-) {
+fun GeminiTopBar(currentView: ViewMode, modelName: String, onMenuClick: () -> Unit, onSettingsClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        IconButton(onClick = onMenuClick) {
-            Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground)
-        }
-
+        IconButton(onClick = onMenuClick) { Icon(Icons.Rounded.Menu, "Menu", tint = MaterialTheme.colorScheme.onBackground) }
         Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+            modifier = Modifier.clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
@@ -310,24 +288,21 @@ fun GeminiTopBar(
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-
-        IconButton(onClick = onSettingsClick) {
-            Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground)
-        }
+        IconButton(onClick = onSettingsClick) { Icon(Icons.Outlined.Tune, "Config", tint = MaterialTheme.colorScheme.onBackground) }
     }
 }
-// --- FLATTENED UI ITEM WRAPPER ---
+
+// --- FLATTENED UI ITEM WRAPPER (Critical for Performance) ---
 sealed class ChatUiItem(val id: String) {
     data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
-    // NEW: Footer item to hold the buttons (Copy, Share, Like, etc)
-    data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer")
+    data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer") // Holds the actions
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
     data class Suggestions(val idVal: String = "suggestions") : ChatUiItem(idVal)
 }
 
-// --- CHAT VIEW (REBUILT FOR 10K LINE PERFORMANCE & FEATURES) ---
+// --- CHAT VIEW (THE ENGINE) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -343,17 +318,12 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri -> uri?.let { viewModel.addAttachment(it) } }
-
-    val voicePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
+    val galleryLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri -> uri?.let { viewModel.addAttachment(it) } }
+    val voicePermissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    // --- FLATTENING LOGIC: Transforms History -> Flat List of Blocks ---
+    // --- FLATTENING LOGIC ---
     val flatItems by remember(history, isStreaming) {
         derivedStateOf {
             val items = mutableListOf<ChatUiItem>()
@@ -369,26 +339,27 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 if (msg.role == ChatRole.USER) {
                     items.add(ChatUiItem.UserItem(msg))
                 } else {
-                    // PARSE AI MESSAGE INTO BLOCKS
+                    // 1. Parse content into blocks
                     val textToParse = msg.text ?: ""
                     val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
                     
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
-                        // Empty streaming message placeholder
+                        // Empty streaming placeholder if needed
                     } else {
+                        // 2. Add blocks individually
                         blocks.forEach { block ->
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
                     }
                     
-                    // ADD FOOTER (Action Buttons) for AI messages
-                    // Only show if not currently streaming THIS message
+                    // 3. Add Footer (Actions) - ONLY if not streaming this specific message currently
+                    // or if it's an old message
                     if (!isStreaming || msg != history.last()) {
                         items.add(ChatUiItem.AiFooterItem(msg))
                     }
                 }
             }
-            // Add loading indicator at the very end if streaming
+            // 4. Loading Indicator
             if (isStreaming) {
                 items.add(ChatUiItem.LoadingItem(history.lastOrNull()?.id ?: "stream"))
             }
@@ -402,7 +373,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val isNearBottom = lastVisibleIndex >= (totalItems - 5)
+            val isNearBottom = lastVisibleIndex >= (totalItems - 6) // Generous tolerance
 
             if (isNearBottom || isStreaming) {
                 listState.animateScrollToItem(flatItems.size - 1)
@@ -420,37 +391,32 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             ) {
                 items(
                     items = flatItems,
-                    key = { it.id },
+                    key = { it.id }, // Stable ID for performance
                     contentType = { it::class.simpleName }
                 ) { item ->
                     when (item) {
                         is ChatUiItem.Greeting -> GreetingHeader()
                         is ChatUiItem.Suggestions -> SuggestionGrid(suggestions) { viewModel.updatePrompt(it) }
                         is ChatUiItem.UserItem -> {
-                            // User Message with Edit Logic
                             UserMessageBubble(
                                 msg = item.msg, 
                                 isDark = isDark,
-                                onEdit = { viewModel.updatePrompt(it) } 
+                                onEdit = { viewModel.updatePrompt(it) } // Feature: Edit
                             )
                         }
                         is ChatUiItem.AiBlockItem -> {
-                            // Render Block
+                            // High Performance rendering
                             AiBlockRenderer(item.block, isDark)
                         }
                         is ChatUiItem.AiFooterItem -> {
-                            // NEW: Render Footer (Actions)
+                            // Feature: Copy, Share, Speak
                             AiMessageFooter(
                                 msg = item.msg,
                                 isDark = isDark,
-                                onCopy = { clipboardManager.setText(AnnotatedString(it)) },
+                                onCopy = { clipboardManager.setText(AnnotatedString(it)); Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show() },
                                 onShare = { 
-                                    val sendIntent = Intent().apply {
-                                        action = Intent.ACTION_SEND
-                                        putExtra(Intent.EXTRA_TEXT, it)
-                                        type = "text/plain"
-                                    }
-                                    context.startActivity(Intent.createChooser(sendIntent, null))
+                                    val i = Intent().apply { action = Intent.ACTION_SEND; putExtra(Intent.EXTRA_TEXT, it); type = "text/plain" }
+                                    context.startActivity(Intent.createChooser(i, null)) 
                                 },
                                 onSpeak = { viewModel.speakText(it) }
                             )
@@ -461,25 +427,20 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // --- INPUT BAR ---
+        // Input Bar Overlay
         Box(
-            modifier = Modifier
-                .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
+            modifier = Modifier.align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
                 .ifTrue(isExpanded) { fillMaxHeight() }
                 .background(if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent)
-                .imePadding() 
+                .imePadding()
         ) {
             if (!isExpanded) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .align(Alignment.BottomCenter)
+                    modifier = Modifier.fillMaxWidth().height(120.dp).align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background)))
                 )
             }
-
             GeminiSmartInputBar(
                 prompt = prompt,
                 onPromptChange = { viewModel.updatePrompt(it) },
@@ -495,102 +456,52 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
     }
 }
-// --- HELPER COMPOSABLES FOR CHAT ---
+
+// --- MESSAGE COMPONENTS ---
 
 @Composable
-fun UserMessageBubble(
-    msg: ChatMessage, 
-    isDark: Boolean,
-    onEdit: (String) -> Unit // Callback for editing
-) {
+fun UserMessageBubble(msg: ChatMessage, isDark: Boolean, onEdit: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-        // Attachments
         if (msg.attachments.isNotEmpty()) {
             Row(modifier = Modifier.padding(bottom = 4.dp).horizontalScroll(rememberScrollState())) {
-                msg.attachments.forEach { attachment ->
-                   Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp).padding(4.dp))
-                }
+                msg.attachments.forEach { attachment -> Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp).padding(4.dp)) }
             }
         }
-        
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Edit Button (Shows only for user messages)
-            IconButton(
-                onClick = { onEdit(msg.text ?: "") },
-                modifier = Modifier.size(28.dp).padding(end = 4.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Edit, 
-                    contentDescription = "Edit", 
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(16.dp)
-                )
+            // Edit Button for User
+            IconButton(onClick = { onEdit(msg.text ?: "") }, modifier = Modifier.size(28.dp).padding(end = 4.dp)) {
+                Icon(Icons.Outlined.Edit, "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
             }
-
             Box(
-                modifier = Modifier
-                    .widthIn(max = 300.dp)
-                    .clip(RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(12.dp)
+                modifier = Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp))
+                    .background(MaterialTheme.colorScheme.primary).padding(12.dp)
             ) {
-                Text(
-                    text = msg.text ?: "",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontSize = 16.sp
-                )
+                Text(text = msg.text ?: "", color = MaterialTheme.colorScheme.onPrimary, fontSize = 16.sp)
             }
         }
     }
 }
 
-// --- NEW COMPONENT: AI MESSAGE FOOTER (Actions) ---
 @Composable
-fun AiMessageFooter(
-    msg: ChatMessage,
-    isDark: Boolean,
-    onCopy: (String) -> Unit,
-    onShare: (String) -> Unit,
-    onSpeak: (String) -> Unit
-) {
-    val iconTint = if (isDark) Color.Gray else Color.Gray
+fun AiMessageFooter(msg: ChatMessage, isDark: Boolean, onCopy: (String) -> Unit, onShare: (String) -> Unit, onSpeak: (String) -> Unit) {
+    val iconTint = Color.Gray
     val text = msg.text ?: ""
-
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Copy
-        IconButton(onClick = { onCopy(text) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Outlined.ContentCopy, "Copy", tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-        
-        // Share
-        IconButton(onClick = { onShare(text) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Outlined.Share, "Share", tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-
-        // Speak
-        IconButton(onClick = { onSpeak(text) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Outlined.VolumeUp, "Speak", tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-
+        IconButton(onClick = { onCopy(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ContentCopy, "Copy", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { onShare(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Share, "Share", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { onSpeak(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.VolumeUp, "Speak", tint = iconTint, modifier = Modifier.size(18.dp)) }
         Spacer(modifier = Modifier.width(8.dp))
-
-        // Like / Dislike (Mock functionality)
-        IconButton(onClick = { /* TODO: Implement Feedback */ }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-        IconButton(onClick = { /* TODO: Implement Feedback */ }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp))
-        }
+        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp)) }
     }
 }
 
-// --- UPDATED: SMART INPUT BAR (With Waveform & Typewriter) ---
+// --- INPUT & ANIMATIONS ---
+
 @Composable
 fun GeminiSmartInputBar(
     prompt: String,
@@ -609,23 +520,17 @@ fun GeminiSmartInputBar(
     val shadowElevation = if (isExpanded) 0.dp else 12.dp
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = if (isExpanded) 0.dp else 8.dp, 
-                end = if (isExpanded) 0.dp else 8.dp,
-                bottom = if (isExpanded) 0.dp else 16.dp,
-                top = 0.dp
-            )
-            .animateContentSize()
+        modifier = Modifier.fillMaxWidth().padding(
+            start = if (isExpanded) 0.dp else 8.dp, 
+            end = if (isExpanded) 0.dp else 8.dp, 
+            bottom = if (isExpanded) 0.dp else 16.dp, 
+            top = 0.dp
+        ).animateContentSize()
     ) {
         if (attachmentCount > 0 && !isExpanded) {
             Row(
-                modifier = Modifier
-                    .padding(bottom = 8.dp, start = 4.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp).clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Image, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -633,14 +538,10 @@ fun GeminiSmartInputBar(
                 Text("$attachmentCount Image Attached", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
-
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .ifTrue(isExpanded) { fillMaxHeight() }
+            modifier = Modifier.fillMaxWidth().ifTrue(isExpanded) { fillMaxHeight() }
                 .shadow(shadowElevation, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp), spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
-                .background(bgColor)
+                .clip(RoundedCornerShape(if (isExpanded) 0.dp else 24.dp)).background(bgColor)
                 .border(1.dp, borderColor, RoundedCornerShape(if (isExpanded) 0.dp else 24.dp))
         ) {
             if (isExpanded) {
@@ -649,134 +550,55 @@ fun GeminiSmartInputBar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onExpandToggle) {
-                        Icon(Icons.Rounded.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Button(
-                        onClick = onSend,
-                        enabled = prompt.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text("Send")
-                    }
+                    IconButton(onClick = onExpandToggle) { Icon(Icons.Rounded.Close, "Close", tint = MaterialTheme.colorScheme.onSurface) }
+                    Button(onClick = onSend, enabled = prompt.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) { Text("Send") }
                 }
                 Divider(color = borderColor)
             }
-
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(if (isExpanded) 16.dp else 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(if (isExpanded) 16.dp else 12.dp),
                 verticalAlignment = if (isExpanded) Alignment.Top else Alignment.Bottom
             ) {
                 if (!isExpanded) {
-                    IconButton(
-                        onClick = onAttach,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(MaterialTheme.colorScheme.background, CircleShape)
-                            .border(1.dp, borderColor, CircleShape)
-                    ) {
+                    IconButton(onClick = onAttach, modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.background, CircleShape).border(1.dp, borderColor, CircleShape)) {
                         Icon(Icons.Rounded.Add, "Attach", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
-
                     Spacer(modifier = Modifier.width(12.dp))
-
-                    // MIC / WAVEFORM BUTTON
                     Box(
-                        modifier = Modifier
-                            .height(36.dp)
-                            // Width expands when active to show waveform
-                            .width(if (isVoiceActive) 80.dp else 36.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isVoiceActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.background
-                            )
+                        modifier = Modifier.height(36.dp).width(if (isVoiceActive) 80.dp else 36.dp).clip(CircleShape)
+                            .background(if (isVoiceActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.background)
                             .border(1.dp, if(isVoiceActive) MaterialTheme.colorScheme.error else borderColor, CircleShape)
                             .clickable { onMicClick() },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isVoiceActive) {
-                            // FEATURE 1: VOICE WAVEFORM
-                            VoiceWaveform()
-                        } else {
-                            Icon(
-                                Icons.Rounded.Mic, 
-                                "Voice", 
-                                tint = MaterialTheme.colorScheme.onSurface, 
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        if (isVoiceActive) VoiceWaveform() else Icon(Icons.Rounded.Mic, "Voice", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
                     }
-
                     Spacer(modifier = Modifier.width(16.dp))
                 }
-
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = if (isExpanded) 0.dp else 6.dp)
-                        .heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 120.dp)
+                    modifier = Modifier.weight(1f).padding(vertical = if (isExpanded) 0.dp else 6.dp).heightIn(max = if (isExpanded) Int.MAX_VALUE.dp else 120.dp)
                 ) {
-                    if (prompt.isEmpty() && !isVoiceActive) {
-                        // FEATURE 3: TYPEWRITER PLACEHOLDER
-                        TypewriterPlaceholder(isExpanded)
-                    } else if (prompt.isEmpty() && isVoiceActive) {
-                        Text(
-                            "Listening...",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-
+                    if (prompt.isEmpty() && !isVoiceActive) TypewriterPlaceholder(isExpanded)
+                    else if (prompt.isEmpty() && isVoiceActive) Text("Listening...", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                     BasicTextField(
-                        value = prompt,
-                        onValueChange = onPromptChange,
-                        textStyle = TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 18.sp,
-                            lineHeight = 26.sp
-                        ),
+                        value = prompt, onValueChange = onPromptChange,
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, lineHeight = 26.sp),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .ifTrue(isExpanded) { fillMaxHeight() }
+                        modifier = Modifier.fillMaxWidth().ifTrue(isExpanded) { fillMaxHeight() }
                     )
                 }
-
                 if (!isExpanded) {
                     Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = onExpandToggle,
-                        modifier = Modifier.size(32.dp).padding(bottom = 2.dp)
-                    ) {
-                        Icon(Icons.Rounded.Fullscreen, "Expand", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-
+                    IconButton(onClick = onExpandToggle, modifier = Modifier.size(32.dp).padding(bottom = 2.dp)) { Icon(Icons.Rounded.Fullscreen, "Expand", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Spacer(modifier = Modifier.width(12.dp))
-
                     val isSendEnabled = prompt.isNotBlank() || isStreaming
-                    val btnColor = if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
-
                     Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(btnColor)
+                        modifier = Modifier.size(44.dp).clip(CircleShape).background(if (isSendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
                             .clickable(enabled = isSendEnabled) { onSend() },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isStreaming) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        } else {
-                            Icon(
-                                Icons.Rounded.ArrowUpward,
-                                "Send",
-                                tint = if (isSendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        if (isStreaming) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        else Icon(Icons.Rounded.ArrowUpward, "Send", tint = if (isSendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -784,73 +606,36 @@ fun GeminiSmartInputBar(
     }
 }
 
-// --- FEATURE 1 IMPLEMENTATION: VOICE WAVEFORM ---
 @Composable
 fun VoiceWaveform() {
     val infiniteTransition = rememberInfiniteTransition(label = "wave")
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         repeat(5) { index ->
             val height by infiniteTransition.animateFloat(
-                initialValue = 10f,
-                targetValue = 24f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(300, delayMillis = index * 50, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
+                initialValue = 10f, targetValue = 24f,
+                animationSpec = infiniteRepeatable(animation = tween(300, delayMillis = index * 50, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
                 label = "bar$index"
             )
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(height.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.error)
-            )
+            Box(modifier = Modifier.width(4.dp).height(height.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.error))
         }
     }
 }
 
-// --- FEATURE 3 IMPLEMENTATION: TYPEWRITER PLACEHOLDER ---
 @Composable
 fun TypewriterPlaceholder(isExpanded: Boolean) {
-    val hints = listOf(
-        "Ask Cipher to code...",
-        "Write a creative story...",
-        "Debug my application...",
-        "Explain Quantum Physics...",
-        "Generate a business plan..."
-    )
-
+    val hints = listOf("Ask Cipher to code...", "Write a creative story...", "Debug my application...", "Explain Quantum Physics...", "Generate a business plan...")
     var displayedText by remember { mutableStateOf("") }
     var hintIndex by remember { mutableIntStateOf(0) }
-
     LaunchedEffect(Unit) {
         while (true) {
             val targetText = hints[hintIndex]
-
-            // Type out
-            for (i in 1..targetText.length) {
-                displayedText = targetText.take(i)
-                delay(50)
-            }
-
-            delay(2000) // Wait
-
-            // Delete
-            for (i in targetText.length downTo 0) {
-                displayedText = targetText.take(i)
-                delay(30)
-            }
-
+            for (i in 1..targetText.length) { displayedText = targetText.take(i); delay(50) }
+            delay(2000)
+            for (i in targetText.length downTo 0) { displayedText = targetText.take(i); delay(30) }
             delay(500)
             hintIndex = (hintIndex + 1) % hints.size
         }
     }
-
     Text(
         text = if (isExpanded) "Start coding or writing..." else displayedText,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -860,168 +645,65 @@ fun TypewriterPlaceholder(isExpanded: Boolean) {
     )
 }
 
-// --- GREETING ---
 @Composable
 fun GreetingHeader() {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    val greeting = when (hour) {
-        in 5..11 -> "Good Morning"
-        in 12..17 -> "Good Afternoon"
-        else -> "Good Evening"
-    }
-
-    val pastelGreen = Color(0xFF81C784) 
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 60.dp, bottom = 20.dp)
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.my_logo),
-            contentDescription = null,
-            modifier = Modifier.size(48.dp).padding(bottom = 20.dp)
-        )
-
-        Text(
-            text = "$greeting, Creator",
-            style = MaterialTheme.typography.headlineMedium.copy(lineHeight = 40.sp),
-            fontWeight = FontWeight.Bold,
-            color = pastelGreen 
-        )
-
+    val greeting = when (hour) { in 5..11 -> "Good Morning"; in 12..17 -> "Good Afternoon"; else -> "Good Evening" }
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 60.dp, bottom = 20.dp)) {
+        Image(painter = painterResource(id = R.drawable.my_logo), contentDescription = null, modifier = Modifier.size(48.dp).padding(bottom = 20.dp))
+        Text(text = "$greeting, Creator", style = MaterialTheme.typography.headlineMedium.copy(lineHeight = 40.sp), fontWeight = FontWeight.Bold, color = Color(0xFF81C784))
         Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Ready to build something extraordinary?",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
+        Text(text = "Ready to build something extraordinary?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
     }
 }
 
-// --- SUGGESTION GRID ---
 @Composable
-fun SuggestionGrid(
-    suggestions: List<String>,
-    onSuggestionClick: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp)
-    ) {
+fun SuggestionGrid(suggestions: List<String>, onSuggestionClick: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
         suggestions.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                rowItems.forEach { item ->
-                    SuggestionChip(
-                        label = item,
-                        onClick = { onSuggestionClick(item) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (rowItems.size == 1) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowItems.forEach { item -> SuggestionChip(label = item, onClick = { onSuggestionClick(item) }, modifier = Modifier.weight(1f)) }
+                if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-fun SuggestionChip(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun SuggestionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier
-            .height(80.dp)
-            .clip(RoundedCornerShape(16.dp))
+        modifier = modifier.height(80.dp).clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(16.dp),
+            .clickable { onClick() }.padding(16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-// Helper Extension
-fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier {
-    return if (condition) {
-        then(modifier(Modifier))
-    } else {
-        this
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 fun StreamingIndicator() {
     Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 16.dp)) {
-        Text(
-            "Cipher is thinking...",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Cipher is thinking...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-// --- SIDEBAR ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun InternalSidebar(
-    sessions: List<Session>,
-    currentSessionId: String?,
-    onSelectSession: (String) -> Unit,
-    onNewSession: () -> Unit,
-    onRequestDelete: (String) -> Unit,
-    onToggleSidebar: () -> Unit,
-    currentView: ViewMode,
-    onViewChange: (ViewMode) -> Unit,
-    onOpenSettings: () -> Unit,
-    isDark: Boolean
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+fun InternalSidebar(sessions: List<Session>, currentSessionId: String?, onSelectSession: (String) -> Unit, onNewSession: () -> Unit, onRequestDelete: (String) -> Unit, onToggleSidebar: () -> Unit, currentView: ViewMode, onViewChange: (ViewMode) -> Unit, onOpenSettings: () -> Unit, isDark: Boolean) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
-             Image(
-                 painter = painterResource(id = R.drawable.my_logo),
-                 contentDescription = "Cipher Logo",
-                 modifier = Modifier.size(32.dp)
-             )
+             Image(painter = painterResource(id = R.drawable.my_logo), contentDescription = "Cipher Logo", modifier = Modifier.size(32.dp))
              Spacer(modifier = Modifier.width(12.dp))
              Text("Cipher Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
-
-        Button(
-            onClick = onNewSession,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-            elevation = ButtonDefaults.buttonElevation(0.dp)
-        ) {
-            Icon(Icons.Rounded.Add, null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("New Chat")
+        Button(onClick = onNewSession, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer), elevation = ButtonDefaults.buttonElevation(0.dp)) {
+            Icon(Icons.Rounded.Add, null); Spacer(modifier = Modifier.width(8.dp)); Text("New Chat")
         }
-
         Spacer(modifier = Modifier.height(24.dp))
-
         Text("APPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
-
         SidebarItem(Icons.Default.ChatBubbleOutline, "Chat", currentView == ViewMode.CHAT) { onViewChange(ViewMode.CHAT) }
         SidebarItem(Icons.Default.Code, "Code Lab", currentView == ViewMode.CODE_LAB) { onViewChange(ViewMode.CODE_LAB) }
         SidebarItem(Icons.Default.Visibility, "Vision Hub", currentView == ViewMode.VISION_HUB) { onViewChange(ViewMode.VISION_HUB) }
@@ -1029,72 +711,40 @@ fun InternalSidebar(
         SidebarItem(Icons.Default.Security, "Cyber House", currentView == ViewMode.CYBER_HOUSE) { onViewChange(ViewMode.CYBER_HOUSE) }
         SidebarItem(Icons.Default.Analytics, "Data Analyst", currentView == ViewMode.DATA_ANALYST) { onViewChange(ViewMode.DATA_ANALYST) }
         SidebarItem(Icons.Default.Description, "Doc Intel", currentView == ViewMode.DOC_INTEL) { onViewChange(ViewMode.DOC_INTEL) }
-
         Spacer(modifier = Modifier.height(24.dp))
         Divider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(modifier = Modifier.height(16.dp))
-
         Text("RECENT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
-
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(sessions) { session ->
                 val isSelected = session.id == currentSessionId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-                        .combinedClickable(
-                            onClick = { onSelectSession(session.id) },
-                            onLongClick = { onRequestDelete(session.id) }
-                        )
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                        .combinedClickable(onClick = { onSelectSession(session.id) }, onLongClick = { onRequestDelete(session.id) }).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Message, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = session.title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(text = session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-
         Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
         Row(modifier = Modifier.clickable { onViewChange(ViewMode.ABOUT) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text("About", color = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(modifier = Modifier.width(12.dp)); Text("About", color = MaterialTheme.colorScheme.onSurface)
         }
-
         Row(modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text("Settings", color = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(modifier = Modifier.width(12.dp)); Text("Settings", color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
 
 @Composable
 fun SidebarItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent)
-            .clickable { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(12.dp))
         Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
+
+// Helper Extension
+fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier = if (condition) then(modifier(Modifier)) else this
