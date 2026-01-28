@@ -8,9 +8,11 @@ import com.cipher.studio.domain.service.GenerativeAIService
 import com.cipher.studio.domain.service.StreamResult
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,7 +61,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         history: List<ChatMessage>,
         config: ModelConfig
     ): Flow<StreamResult> = flow {
-        
+
         // 1. API Key Check
         if (apiKey.isBlank()) {
             emit(StreamResult.Error("No API Key found. Please check Settings."))
@@ -71,11 +73,10 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         val timeString = sdf.format(Date())
         val combinedSystemInstruction = "$DEEP_THINK_INSTRUCTION\n[SYSTEM TELEMETRY]\nSERVER_TIME: $timeString\n\nCONTEXT: ${config.systemInstruction}"
 
-        // 3. Configure Model (SDK 0.9.0 Compatible)
+        // 3. Configure Model
         val generativeModel = GenerativeModel(
             modelName = config.model.value,
             apiKey = apiKey,
-            // FIX 1: Using 'content { text(...) }' builder for systemInstruction
             systemInstruction = content { text(combinedSystemInstruction) },
             generationConfig = generationConfig {
                 temperature = config.temperature.toFloat()
@@ -94,26 +95,21 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
         // 4. Construct Sanitized History
         val sdkHistory = mutableListOf<Content>()
         
-        // IMPORTANT: The 'history' list from ViewModel usually contains the CURRENT prompt as the last item.
-        // We MUST remove it before passing to startChat, or we get the "User role must not follow User role" error.
+        // Remove the last message (current prompt) to strictly follow Gemini API rules
         val pastHistory = if (history.isNotEmpty()) history.dropLast(1) else emptyList()
 
         pastHistory.forEach { msg ->
-            // Map Roles ("user" or "model")
             val roleStr = if (msg.role == ChatRole.USER) "user" else "model"
-            
-            // FIX 2: Prevent User -> User collision
-            // If the last message in our built history was 'user' and the new one is also 'user',
-            // we insert a dummy model response.
+
+            // FIX: Prevent User -> User collision
             if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user" && roleStr == "user") {
                 sdkHistory.add(content("model") { text("...") })
             }
-            
-            // Note: Consecutive 'model' messages are usually fine, or merged by SDK, but safe to leave as is.
 
             sdkHistory.add(content(roleStr) {
                 text(msg.text)
                 msg.attachments.forEach { attachment ->
+                    // SAFE DECODING: Handles memory issues gracefully
                     val bitmap = base64ToBitmap(attachment.data)
                     if (bitmap != null) {
                         image(bitmap)
@@ -122,8 +118,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             })
         }
 
-        // FIX 3: Ensure History ends with MODEL
-        // 'startChat' requires the last message in history to be from the MODEL if we are about to send a new USER prompt.
+        // Ensure History ends with MODEL before sending new User prompt
         if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user") {
             sdkHistory.add(content("model") { text("Acknowledged.") })
         }
@@ -145,7 +140,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
 
             // 7. Execute Stream
             val responseStream = chat.sendMessageStream(inputContent)
-            
+
             responseStream.collect { chunk ->
                 if (chunk.text != null) {
                     emit(StreamResult.Content(chunk.text!!))
@@ -154,42 +149,50 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
 
         } catch (e: Exception) {
             e.printStackTrace()
-            
-            // FALLBACK: Single-Shot Mode
-            // If chat still fails (e.g. invalid history state), try generating without history.
-            // This prevents the app from showing an error to the user.
-            val fallbackStream = generativeModel.generateContentStream(content {
-                text(prompt)
-                attachments.forEach { attachment ->
-                    val bitmap = base64ToBitmap(attachment.data)
-                    if (bitmap != null) {
-                        image(bitmap)
+
+            // FALLBACK: Single-Shot Mode (If history is corrupted or too large)
+            try {
+                val fallbackStream = generativeModel.generateContentStream(content {
+                    text(prompt)
+                    attachments.forEach { attachment ->
+                        val bitmap = base64ToBitmap(attachment.data)
+                        if (bitmap != null) {
+                            image(bitmap)
+                        }
+                    }
+                })
+
+                fallbackStream.collect { chunk ->
+                    if (chunk.text != null) {
+                        emit(StreamResult.Content(chunk.text!!))
                     }
                 }
-            })
-
-            fallbackStream.collect { chunk ->
-                if (chunk.text != null) {
-                    emit(StreamResult.Content(chunk.text!!))
-                }
+            } catch (fallbackError: Exception) {
+                emit(StreamResult.Error("Generation Failed: ${fallbackError.message}"))
             }
         }
 
     }.catch { e ->
-        // Last resort error handling
         val errorMsg = e.message ?: "Unknown Error"
-        // If it's the role error, give a hint
         if (errorMsg.contains("role", ignoreCase = true)) {
-            emit(StreamResult.Error("Session Sync Error. Please clear chat or restart."))
+            emit(StreamResult.Error("Session Sync Error. Please clear chat."))
         } else {
             emit(StreamResult.Error("Gemini Error: $errorMsg"))
         }
     }
+    .flowOn(Dispatchers.IO) // <--- THE CRITICAL FIX: Moves everything off the Main Thread!
 
+    // --- HELPER: SAFE BITMAP DECODER ---
     private fun base64ToBitmap(base64Str: String): Bitmap? {
         return try {
             val decodedBytes = Base64.decode(base64Str, Base64.DEFAULT)
+            // Optimization: If image is massive, could sample it down here, 
+            // but for now we just catch OOM.
             BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        } catch (e: OutOfMemoryError) {
+            // CRITICAL SAFETY: If phone runs out of RAM, don't crash. Just skip the image.
+            System.gc() // Suggest garbage collection
+            null 
         } catch (e: Exception) {
             null
         }
