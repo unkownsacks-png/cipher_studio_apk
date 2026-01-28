@@ -24,7 +24,7 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    # Note: You need to store your google-services.json content in GitHub Secrets
+    # Note: You need to store your google-services.json content in GitHub SecretS
     # Secret Name: GOOGLE_SERVICES_JSON
     - name: Create google-services.json
       env:
