@@ -1,6 +1,7 @@
 package com.cipher.studio.presentation.main
 
 import android.Manifest
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,9 +47,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -313,17 +316,18 @@ fun GeminiTopBar(
         }
     }
 }
-
 // --- FLATTENED UI ITEM WRAPPER ---
 sealed class ChatUiItem(val id: String) {
     data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
+    // NEW: Footer item to hold the buttons (Copy, Share, Like, etc)
+    data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer")
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
     data class Suggestions(val idVal: String = "suggestions") : ChatUiItem(idVal)
 }
 
-// --- CHAT VIEW (REBUILT FOR 10K LINE PERFORMANCE) ---
+// --- CHAT VIEW (REBUILT FOR 10K LINE PERFORMANCE & FEATURES) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -337,6 +341,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -359,15 +364,13 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
 
             history.forEach { msg ->
-                // Fix potential null ID
                 val safeMsgId = msg.id ?: UUID.randomUUID().toString()
                 
                 if (msg.role == ChatRole.USER) {
                     items.add(ChatUiItem.UserItem(msg))
                 } else {
-                    // PARSE AI MESSAGE INTO BLOCKS HERE
+                    // PARSE AI MESSAGE INTO BLOCKS
                     val textToParse = msg.text ?: ""
-                    // CRITICAL FIX: Pass message ID to parser for Stable Keys
                     val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
                     
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
@@ -376,6 +379,12 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                         blocks.forEach { block ->
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
+                    }
+                    
+                    // ADD FOOTER (Action Buttons) for AI messages
+                    // Only show if not currently streaming THIS message
+                    if (!isStreaming || msg != history.last()) {
+                        items.add(ChatUiItem.AiFooterItem(msg))
                     }
                 }
             }
@@ -393,7 +402,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val isNearBottom = lastVisibleIndex >= (totalItems - 5) // Increased tolerance
+            val isNearBottom = lastVisibleIndex >= (totalItems - 5)
 
             if (isNearBottom || isStreaming) {
                 listState.animateScrollToItem(flatItems.size - 1)
@@ -418,12 +427,33 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                         is ChatUiItem.Greeting -> GreetingHeader()
                         is ChatUiItem.Suggestions -> SuggestionGrid(suggestions) { viewModel.updatePrompt(it) }
                         is ChatUiItem.UserItem -> {
-                            // Render User Message directly
-                            UserMessageBubble(item.msg, isDark)
+                            // User Message with Edit Logic
+                            UserMessageBubble(
+                                msg = item.msg, 
+                                isDark = isDark,
+                                onEdit = { viewModel.updatePrompt(it) } 
+                            )
                         }
                         is ChatUiItem.AiBlockItem -> {
-                            // Render INDIVIDUAL AI BLOCKS (No Nested Scroll!)
+                            // Render Block
                             AiBlockRenderer(item.block, isDark)
+                        }
+                        is ChatUiItem.AiFooterItem -> {
+                            // NEW: Render Footer (Actions)
+                            AiMessageFooter(
+                                msg = item.msg,
+                                isDark = isDark,
+                                onCopy = { clipboardManager.setText(AnnotatedString(it)) },
+                                onShare = { 
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, it)
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, null))
+                                },
+                                onSpeak = { viewModel.speakText(it) }
+                            )
                         }
                         is ChatUiItem.LoadingItem -> StreamingIndicator()
                     }
@@ -431,7 +461,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // --- INPUT BAR (Kept same logic) ---
+        // --- INPUT BAR ---
         Box(
             modifier = Modifier
                 .align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
@@ -465,35 +495,97 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
     }
 }
-
-// --- HELPER COMPOSABLES FOR CHAT (Extracted for purity) ---
+// --- HELPER COMPOSABLES FOR CHAT ---
 
 @Composable
-fun UserMessageBubble(msg: ChatMessage, isDark: Boolean) {
+fun UserMessageBubble(
+    msg: ChatMessage, 
+    isDark: Boolean,
+    onEdit: (String) -> Unit // Callback for editing
+) {
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         // Attachments
         if (msg.attachments.isNotEmpty()) {
             Row(modifier = Modifier.padding(bottom = 4.dp).horizontalScroll(rememberScrollState())) {
                 msg.attachments.forEach { attachment ->
-                   // Placeholder for image rendering logic (omitted for brevity, keep existing logic if any)
-                   // Or simply:
                    Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp).padding(4.dp))
                 }
             }
         }
         
-        Box(
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .clip(RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp))
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = msg.text ?: "",
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontSize = 16.sp
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Edit Button (Shows only for user messages)
+            IconButton(
+                onClick = { onEdit(msg.text ?: "") },
+                modifier = Modifier.size(28.dp).padding(end = 4.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Edit, 
+                    contentDescription = "Edit", 
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .clip(RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = msg.text ?: "",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = 16.sp
+                )
+            }
+        }
+    }
+}
+
+// --- NEW COMPONENT: AI MESSAGE FOOTER (Actions) ---
+@Composable
+fun AiMessageFooter(
+    msg: ChatMessage,
+    isDark: Boolean,
+    onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onSpeak: (String) -> Unit
+) {
+    val iconTint = if (isDark) Color.Gray else Color.Gray
+    val text = msg.text ?: ""
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Copy
+        IconButton(onClick = { onCopy(text) }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Outlined.ContentCopy, "Copy", tint = iconTint, modifier = Modifier.size(18.dp))
+        }
+        
+        // Share
+        IconButton(onClick = { onShare(text) }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Outlined.Share, "Share", tint = iconTint, modifier = Modifier.size(18.dp))
+        }
+
+        // Speak
+        IconButton(onClick = { onSpeak(text) }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Outlined.VolumeUp, "Speak", tint = iconTint, modifier = Modifier.size(18.dp))
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Like / Dislike (Mock functionality)
+        IconButton(onClick = { /* TODO: Implement Feedback */ }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp))
+        }
+        IconButton(onClick = { /* TODO: Implement Feedback */ }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp))
         }
     }
 }
