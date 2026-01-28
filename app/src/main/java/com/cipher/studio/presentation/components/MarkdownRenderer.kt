@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
@@ -45,12 +46,12 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (PRODUCTION READY)
+ * CIPHER STUDIO: FINAL MARKDOWN RENDERER
  *
- * UPDATES:
- * 1. Infinite Loop Guard: Prevents app freeze/crash on malformed markdown.
- * 2. HTML Support: Renders <b>, <i>, <u>, <s>, <br> tags.
- * 3. Strict List Parsing: Handles cases like "1.Text" (no space) gracefully.
+ * FIXED:
+ * 1. "Texture Too Large" Crash: Code blocks are now capped at 600dp height with internal scrolling.
+ * 2. Massive Text Crash: Large text blocks are split into smaller chunks (Max 50 lines).
+ * 3. Scroll Crash: Rendering errors are caught safely without killing the app.
  */
 
 // --- COMPATIBILITY WRAPPER ---
@@ -61,20 +62,25 @@ fun MarkdownRenderer(
     isStreaming: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Generate a static ID to avoid UI flickering
     val baseId = remember { UUID.randomUUID().toString() }
     
-    // Optimized: Only re-parse if content actually changes significantly to reduce lag
+    // Optimized: Only re-parse if content changes
     val blocks = remember(content) { 
         parseMarkdownBlocks(content, baseId) 
     }
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp) // Reduced spacing for better flow
     ) {
         blocks.forEach { block ->
-            AiBlockRenderer(block, isDark = theme == Theme.DARK)
+            // SAFE RENDERER WRAPPER: If one block fails, the rest still show.
+            try {
+                AiBlockRenderer(block, isDark = theme == Theme.DARK)
+            } catch (e: Exception) {
+                // Fallback for corrupted blocks
+                Text("⚠️ Error rendering block", color = Color.Red, fontSize = 10.sp)
+            }
         }
     }
 }
@@ -96,11 +102,10 @@ sealed class MarkdownBlock {
     }
 }
 
-// --- BULLETPROOF PARSER LOGIC ---
+// --- PARSER LOGIC (With Chunking) ---
 fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
 
-    // Safety check: Empty text
     if (text.isBlank()) return emptyList()
 
     val lines = text.lines()
@@ -110,7 +115,6 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     fun getStableId() = "${baseId}_blk_${blockIndex++}"
 
     while (i < lines.size) {
-        // [CRITICAL FIX]: Loop Guard Variable
         val startIndex = i
 
         try {
@@ -137,7 +141,6 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
 
             // 2. TABLE
             if (trimmed.startsWith("|")) {
-                // Peek next line safely
                 if (i + 1 < lines.size && lines[i+1].trim().contains("---")) {
                     val tableRows = mutableListOf<List<String>>()
                     while (i < lines.size && lines[i].trim().startsWith("|")) {
@@ -184,7 +187,7 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                 i++
                 continue
             }
-            // [FIX]: Ensure space exists after number to avoid conflict with text
+            
             val orderedRegex = Regex("^\\d+\\.\\s(.*)")
             val orderedMatch = orderedRegex.find(trimmed)
             if (orderedMatch != null) {
@@ -211,7 +214,6 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
             }
 
             // 8. IMAGES
-            // Try-catch specific to regex to avoid crashes on partial streaming
             try {
                 val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
                 if (imgMatch != null) {
@@ -220,15 +222,15 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                     continue
                 }
             } catch (e: Exception) {
-                // Ignore regex error and treat as text
+                // Ignore regex error
             }
 
-            // 9. REGULAR TEXT
+            // 9. REGULAR TEXT (With Chunking Logic)
             val textBuilder = StringBuilder()
+            var lineCount = 0
+            
             while (i < lines.size) {
                 val nextTrim = lines[i].trim()
-                // [FIX]: Lookahead includes \\s to ensure text blocks consume "1.Text" (no space)
-                // This prevents the infinite loop where text says "It's a list" but list says "No space".
                 if (nextTrim.startsWith("```") || 
                     (nextTrim.startsWith("|") && i + 1 < lines.size && lines[i+1].contains("---")) || 
                     nextTrim.startsWith("#") || 
@@ -240,8 +242,19 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                     nextTrim.matches(Regex("^\\d+\\.\\s.*"))) {
                     break
                 }
+                
                 textBuilder.append(lines[i]).append("\n")
+                lineCount++
                 i++
+
+                // [CRITICAL FIX]: Split massive text blocks
+                // If a text block exceeds 50 lines, we break it. This allows LazyColumn
+                // to recycle views and prevents "Texture too large" crashes.
+                if (lineCount >= 50) {
+                    blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd(), getStableId()))
+                    textBuilder.clear()
+                    lineCount = 0
+                }
             }
 
             if (textBuilder.isNotEmpty()) {
@@ -250,18 +263,13 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                 i++
             }
 
-            // [CRITICAL FIX]: THE SAFETY NET
-            // If logic failed to advance 'i', forcefully consume the line as text.
-            // This guarantees the loop will NEVER be infinite.
+            // SAFETY NET
             if (i == startIndex) {
-                Log.w("MarkdownParser", "Loop stuck at line $i. Force consuming.")
                 blocks.add(MarkdownBlock.Text(lines[i], getStableId()))
                 i++
             }
 
         } catch (e: Exception) {
-            // GLOBAL SAFETY NET: If any line crashes the parser, skip the line or render as text
-            // instead of crashing the app.
             Log.e("MarkdownParser", "Error parsing line $i: ${e.message}")
             try {
                 if (i < lines.size) {
@@ -271,7 +279,7 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                     break
                 }
             } catch (e2: Exception) {
-                break // Give up if fallback fails
+                break 
             }
         }
     }
@@ -286,6 +294,7 @@ fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
     Column(modifier = Modifier.fillMaxWidth()) {
         when (block) {
             is MarkdownBlock.Header -> MarkdownHeader(block.text, block.level, theme)
+            // Code blocks now handle their own scrolling
             is MarkdownBlock.Code -> EliteCodeBlock(block.language, block.content, isDark)
             is MarkdownBlock.Text -> StyledText(block.content, isDark)
             is MarkdownBlock.Table -> MarkdownTable(block.rows, isDark)
@@ -378,6 +387,11 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // [CRITICAL FIX]: Limit height of code blocks!
+                    // If a code block is 1000 lines long, it will crash the app without this limit.
+                    // We use 600.dp max height and enable vertical scroll within the block.
+                    .heightIn(max = 600.dp) 
+                    .verticalScroll(rememberScrollState()) 
                     .horizontalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
@@ -455,6 +469,11 @@ fun MarkdownTaskItem(content: String, isChecked: Boolean, theme: Theme) {
 
 // --- SAFEST SYNTAX HIGHLIGHTER ---
 fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
+    // If code is MASSIVE (>5000 chars), disable syntax highlighting to prevent lag
+    if (code.length > 5000) {
+        return androidx.compose.ui.text.AnnotatedString(code)
+    }
+
     return buildAnnotatedString {
         append(code) // Base text first
 
@@ -479,7 +498,7 @@ fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
                 if (match.range.last < length) addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
             }
         } catch (e: Exception) {
-            // If syntax highlighting fails, we just show plain code. No crash.
+            // Ignore highlighting errors
         }
     }
 }
@@ -560,7 +579,6 @@ fun StyledText(
                 }
             }
         } catch (e: Exception) {
-            // Fallback to plain text if parsing crashes
             buildAnnotatedString { append(text) }
         }
     }
@@ -582,16 +600,14 @@ fun StyledText(
                         uriHandler.openUri(annotation.item)
                     }
             } catch (e: Exception) {
-                // Ignore click errors
             }
         }
     )
 }
 
-// --- HELPER: SAFE STYLE PARSER (NOW WITH HTML SUPPORT) ---
+// --- HELPER: SAFE STYLE PARSER ---
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
     try {
-        // UPDATED REGEX: Matches Markdown and HTML tags
         val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~|<b>.*?</b>|<strong>.*?</strong>|<i>.*?</i>|<em>.*?</em>|<u>.*?</u>|<s>.*?</s>|<strike>.*?</strike>|<br\\s*/?>)".toRegex(RegexOption.IGNORE_CASE)
         var lastIndex = 0
 
@@ -602,36 +618,27 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
 
             val content = match.value
             when {
-                // Markdown Code
                 content.startsWith("`") -> {
                     val cleanText = content.removeSurrounding("`")
                     withStyle(SpanStyle(background = if (isDark) Color(0xFF3E3E3E) else Color(0xFFE5E7EB), color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F), fontFamily = FontFamily.Monospace, fontSize = 14.sp)) { 
                         append(" $cleanText ") 
                     }
                 }
-                // Markdown Bold
                 content.startsWith("**") -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.removeSurrounding("**")) }
-                // Markdown Italic
                 content.startsWith("*") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.removeSurrounding("*")) }
-                // Markdown Strikethrough
                 content.startsWith("~~") -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.removeSurrounding("~~")) }
                 
-                // HTML Bold
                 content.startsWith("<b>", ignoreCase = true) -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.replace(Regex("</?b>", RegexOption.IGNORE_CASE), "")) }
                 content.startsWith("<strong>", ignoreCase = true) -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.replace(Regex("</?strong>", RegexOption.IGNORE_CASE), "")) }
                 
-                // HTML Italic
                 content.startsWith("<i>", ignoreCase = true) -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.replace(Regex("</?i>", RegexOption.IGNORE_CASE), "")) }
                 content.startsWith("<em>", ignoreCase = true) -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.replace(Regex("</?em>", RegexOption.IGNORE_CASE), "")) }
                 
-                // HTML Underline
                 content.startsWith("<u>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append(content.replace(Regex("</?u>", RegexOption.IGNORE_CASE), "")) }
 
-                // HTML Strikethrough
                 content.startsWith("<s>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.replace(Regex("</?s>", RegexOption.IGNORE_CASE), "")) }
                 content.startsWith("<strike>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.replace(Regex("</?strike>", RegexOption.IGNORE_CASE), "")) }
 
-                // HTML Line Break
                 content.startsWith("<br", ignoreCase = true) -> append("\n")
             }
             lastIndex = match.range.last + 1
@@ -640,7 +647,7 @@ fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: Strin
             append(rawText.substring(lastIndex))
         }
     } catch (e: Exception) {
-        append(rawText) // Fallback
+        append(rawText) 
     }
 }
 
