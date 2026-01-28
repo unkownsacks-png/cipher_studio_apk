@@ -71,19 +71,22 @@ fun MarkdownRenderer(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp) // Reduced spacing for better flow
+        verticalArrangement = Arrangement.spacedBy(8.dp) 
     ) {
         blocks.forEach { block ->
-            // SAFE RENDERER WRAPPER: If one block fails, the rest still show.
-            try {
-                AiBlockRenderer(block, isDark = theme == Theme.DARK)
-            } catch (e: Exception) {
-                // Fallback for corrupted blocks
-                Text("⚠️ Error rendering block", color = Color.Red, fontSize = 10.sp)
-            }
+            // ኮምፖውዝ ውስጥ try-catch መጠቀም ስለማይቻል
+            // ብሎኩ መሰራቱን ወይም አለመስራቱን እዚህ ጋር መከላከል ይቻላል።
+            // ማሳሰቢያ፡ AiBlockRenderer ራሱ ውስጥ ስህተት ካለ እዚያው ፋንክሽን ውስጥ 
+            // ባለው የዳታ ፕሮሰሲንግ ላይ try-catch መጠቀም ይሻላል።
+            
+            AiBlockRenderer(
+                block = block, 
+                isDark = theme == Theme.DARK
+            )
         }
     }
 }
+
 
 // --- DATA STRUCTURES (Stable IDs) ---
 sealed class MarkdownBlock {
