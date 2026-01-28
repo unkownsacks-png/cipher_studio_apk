@@ -45,12 +45,12 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (BULLETPROOF VERSION)
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (PRODUCTION READY)
  *
- * FIXED: 
- * 1. Added Try-Catch blocks around all regex and parsing logic to prevent crashes.
- * 2. Handles incomplete streaming markdown gracefully.
- * 3. Prevents IndexOutOfBoundsException on complex nested styles.
+ * UPDATES:
+ * 1. Infinite Loop Guard: Prevents app freeze/crash on malformed markdown.
+ * 2. HTML Support: Renders <b>, <i>, <u>, <s>, <br> tags.
+ * 3. Strict List Parsing: Handles cases like "1.Text" (no space) gracefully.
  */
 
 // --- COMPATIBILITY WRAPPER ---
@@ -63,7 +63,11 @@ fun MarkdownRenderer(
 ) {
     // Generate a static ID to avoid UI flickering
     val baseId = remember { UUID.randomUUID().toString() }
-    val blocks = parseMarkdownBlocks(content, baseId)
+    
+    // Optimized: Only re-parse if content actually changes significantly to reduce lag
+    val blocks = remember(content) { 
+        parseMarkdownBlocks(content, baseId) 
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -95,7 +99,7 @@ sealed class MarkdownBlock {
 // --- BULLETPROOF PARSER LOGIC ---
 fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
-    
+
     // Safety check: Empty text
     if (text.isBlank()) return emptyList()
 
@@ -106,6 +110,9 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     fun getStableId() = "${baseId}_blk_${blockIndex++}"
 
     while (i < lines.size) {
+        // [CRITICAL FIX]: Loop Guard Variable
+        val startIndex = i
+
         try {
             val line = lines[i]
             val trimmed = line.trim()
@@ -115,7 +122,7 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                 val language = trimmed.removePrefix("```").trim()
                 val codeBuilder = StringBuilder()
                 i++ 
-                
+
                 while (i < lines.size) {
                     if (lines[i].trim().startsWith("```")) {
                         i++ 
@@ -177,6 +184,7 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                 i++
                 continue
             }
+            // [FIX]: Ensure space exists after number to avoid conflict with text
             val orderedRegex = Regex("^\\d+\\.\\s(.*)")
             val orderedMatch = orderedRegex.find(trimmed)
             if (orderedMatch != null) {
@@ -219,6 +227,8 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
             val textBuilder = StringBuilder()
             while (i < lines.size) {
                 val nextTrim = lines[i].trim()
+                // [FIX]: Lookahead includes \\s to ensure text blocks consume "1.Text" (no space)
+                // This prevents the infinite loop where text says "It's a list" but list says "No space".
                 if (nextTrim.startsWith("```") || 
                     (nextTrim.startsWith("|") && i + 1 < lines.size && lines[i+1].contains("---")) || 
                     nextTrim.startsWith("#") || 
@@ -227,16 +237,25 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
                     nextTrim.startsWith("- [") || 
                     nextTrim.startsWith("* ") || 
                     nextTrim.startsWith("- ") || 
-                    nextTrim.matches(Regex("^\\d+\\..*"))) {
+                    nextTrim.matches(Regex("^\\d+\\.\\s.*"))) {
                     break
                 }
                 textBuilder.append(lines[i]).append("\n")
                 i++
             }
-            
+
             if (textBuilder.isNotEmpty()) {
                 blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd(), getStableId()))
             } else if (i < lines.size && lines[i].isBlank()) {
+                i++
+            }
+
+            // [CRITICAL FIX]: THE SAFETY NET
+            // If logic failed to advance 'i', forcefully consume the line as text.
+            // This guarantees the loop will NEVER be infinite.
+            if (i == startIndex) {
+                Log.w("MarkdownParser", "Loop stuck at line $i. Force consuming.")
+                blocks.add(MarkdownBlock.Text(lines[i], getStableId()))
                 i++
             }
 
@@ -263,7 +282,7 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
 @Composable
 fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
     val theme = if(isDark) Theme.DARK else Theme.LIGHT
-    
+
     Column(modifier = Modifier.fillMaxWidth()) {
         when (block) {
             is MarkdownBlock.Header -> MarkdownHeader(block.text, block.level, theme)
@@ -498,7 +517,7 @@ fun EliteImage(url: String, alt: String) {
     )
 }
 
-// --- STYLED TEXT (With Crash Protection) ---
+// --- STYLED TEXT (With Crash Protection & HTML Support) ---
 @Composable
 fun StyledText(
     text: String,
@@ -520,7 +539,7 @@ fun StyledText(
                 linkRegex.findAll(text).forEach { matchResult ->
                     val start = matchResult.range.first
                     val end = matchResult.range.last + 1
-                    
+
                     if (start > lastIndex) {
                         appendStyles(text.substring(lastIndex, start), isDark)
                     }
@@ -569,28 +588,51 @@ fun StyledText(
     )
 }
 
-// --- HELPER: SAFE STYLE PARSER ---
+// --- HELPER: SAFE STYLE PARSER (NOW WITH HTML SUPPORT) ---
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
     try {
-        val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
+        // UPDATED REGEX: Matches Markdown and HTML tags
+        val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~|<b>.*?</b>|<strong>.*?</strong>|<i>.*?</i>|<em>.*?</em>|<u>.*?</u>|<s>.*?</s>|<strike>.*?</strike>|<br\\s*/?>)".toRegex(RegexOption.IGNORE_CASE)
         var lastIndex = 0
 
         pattern.findAll(rawText).forEach { match ->
             if (match.range.first > lastIndex) {
                 append(rawText.substring(lastIndex, match.range.first))
             }
-            
+
             val content = match.value
             when {
+                // Markdown Code
                 content.startsWith("`") -> {
                     val cleanText = content.removeSurrounding("`")
                     withStyle(SpanStyle(background = if (isDark) Color(0xFF3E3E3E) else Color(0xFFE5E7EB), color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F), fontFamily = FontFamily.Monospace, fontSize = 14.sp)) { 
                         append(" $cleanText ") 
                     }
                 }
+                // Markdown Bold
                 content.startsWith("**") -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.removeSurrounding("**")) }
+                // Markdown Italic
                 content.startsWith("*") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.removeSurrounding("*")) }
+                // Markdown Strikethrough
                 content.startsWith("~~") -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.removeSurrounding("~~")) }
+                
+                // HTML Bold
+                content.startsWith("<b>", ignoreCase = true) -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.replace(Regex("</?b>", RegexOption.IGNORE_CASE), "")) }
+                content.startsWith("<strong>", ignoreCase = true) -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.replace(Regex("</?strong>", RegexOption.IGNORE_CASE), "")) }
+                
+                // HTML Italic
+                content.startsWith("<i>", ignoreCase = true) -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.replace(Regex("</?i>", RegexOption.IGNORE_CASE), "")) }
+                content.startsWith("<em>", ignoreCase = true) -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.replace(Regex("</?em>", RegexOption.IGNORE_CASE), "")) }
+                
+                // HTML Underline
+                content.startsWith("<u>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append(content.replace(Regex("</?u>", RegexOption.IGNORE_CASE), "")) }
+
+                // HTML Strikethrough
+                content.startsWith("<s>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.replace(Regex("</?s>", RegexOption.IGNORE_CASE), "")) }
+                content.startsWith("<strike>", ignoreCase = true) -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.replace(Regex("</?strike>", RegexOption.IGNORE_CASE), "")) }
+
+                // HTML Line Break
+                content.startsWith("<br", ignoreCase = true) -> append("\n")
             }
             lastIndex = match.range.last + 1
         }
