@@ -292,17 +292,19 @@ fun GeminiTopBar(currentView: ViewMode, modelName: String, onMenuClick: () -> Un
     }
 }
 
-// --- FLATTENED UI ITEM WRAPPER (Critical for Performance) ---
+// --- FLATTENED UI ITEM WRAPPER ---
 sealed class ChatUiItem(val id: String) {
-    data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
+    // FIX: IDs are now deterministic based on content hash if ID is missing.
+    // This prevents random ID generation which caused the LazyColumn crash.
+    data class UserItem(val msg: ChatMessage, val stableId: String) : ChatUiItem(stableId)
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
-    data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer") // Holds the actions
+    data class AiFooterItem(val msg: ChatMessage, val stableId: String) : ChatUiItem("${stableId}_footer")
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
     data class Suggestions(val idVal: String = "suggestions") : ChatUiItem(idVal)
 }
 
-// --- CHAT VIEW (THE ENGINE) ---
+// --- CHAT VIEW (CRASH-PROOF & OPTIMIZED) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -323,9 +325,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    // --- OPTIMIZED FLATTENING LOGIC (Prevents Unnecessary Recalculation) ---
-    // [OPTIMIZATION]: Only recalculate when history ID changes or streaming state toggles
-    // Using derivedStateOf inside remember for maximum efficiency
+    // --- CRITICAL FIX: DETERMINISTIC IDs ---
     val flatItems by remember(history, isStreaming) {
         derivedStateOf {
             val items = mutableListOf<ChatUiItem>()
@@ -335,34 +335,30 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 items.add(ChatUiItem.Suggestions())
             }
 
-            history.forEach { msg ->
-                val safeMsgId = msg.id ?: UUID.randomUUID().toString()
-
+            history.forEachIndexed { index, msg ->
+                // FIX: Generate a STABLE ID. 
+                // If msg.id is null, use hash of text + index. NEVER use UUID.randomUUID() here.
+                val safeMsgId = msg.id ?: "msg_${msg.text.hashCode()}_$index"
+                
                 if (msg.role == ChatRole.USER) {
-                    items.add(ChatUiItem.UserItem(msg))
+                    items.add(ChatUiItem.UserItem(msg, safeMsgId))
                 } else {
-                    // 1. Parse content into blocks
-                    // [CRITICAL]: parseMarkdownBlocks is now called safely from here
                     val textToParse = msg.text ?: ""
                     val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
-
+                    
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
-                        // Empty streaming placeholder if needed
+                        // Empty streaming placeholder
                     } else {
-                        // 2. Add blocks individually
                         blocks.forEach { block ->
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
                     }
-
-                    // 3. Add Footer (Actions) - ONLY if not streaming this specific message currently
-                    // or if it's an old message
+                    
                     if (!isStreaming || msg != history.last()) {
-                        items.add(ChatUiItem.AiFooterItem(msg))
+                        items.add(ChatUiItem.AiFooterItem(msg, safeMsgId))
                     }
                 }
             }
-            // 4. Loading Indicator
             if (isStreaming) {
                 items.add(ChatUiItem.LoadingItem(history.lastOrNull()?.id ?: "stream"))
             }
@@ -370,18 +366,19 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
     }
 
-    // Smart Auto-Scroll (Improved Logic)
-    LaunchedEffect(flatItems.size, isStreaming) {
+    LaunchedEffect(flatItems.size) {
         if (flatItems.isNotEmpty()) {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            if (totalItems > 0) {
-                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                // Scroll if user is already at the bottom OR if it's a new message (streaming started)
-                val isNearBottom = lastVisibleIndex >= (totalItems - 4) 
-                
-                if (isNearBottom || isStreaming) {
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val isNearBottom = lastVisibleIndex >= (totalItems - 6)
+
+            if (isNearBottom || isStreaming) {
+                // FIX: Wrap in try-catch to prevent rare scroll index crash
+                try {
                     listState.animateScrollToItem(flatItems.size - 1)
+                } catch (e: Exception) {
+                    // Ignore transient scroll errors
                 }
             }
         }
@@ -397,7 +394,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             ) {
                 items(
                     items = flatItems,
-                    key = { it.id }, // Stable ID ensures efficient updates
+                    key = { it.id }, // Now guaranteed stable
                     contentType = { it::class.simpleName }
                 ) { item ->
                     when (item) {
@@ -407,12 +404,10 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                             UserMessageBubble(
                                 msg = item.msg, 
                                 isDark = isDark,
-                                onEdit = { viewModel.updatePrompt(it) } 
+                                onEdit = { viewModel.updatePrompt(it) }
                             )
                         }
                         is ChatUiItem.AiBlockItem -> {
-                            // [PERFORMANCE]: This is where the magic happens. 
-                            // Block-level rendering prevents re-drawing the whole message.
                             AiBlockRenderer(item.block, isDark)
                         }
                         is ChatUiItem.AiFooterItem -> {
@@ -433,13 +428,12 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             }
         }
 
-        // Input Bar Overlay
         Box(
             modifier = Modifier.align(if (isExpanded) Alignment.TopCenter else Alignment.BottomCenter)
                 .fillMaxWidth()
                 .ifTrue(isExpanded) { fillMaxHeight() }
                 .background(if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent)
-                .imePadding() // [FIX]: Prevents keyboard overlap
+                .imePadding()
         ) {
             if (!isExpanded) {
                 Box(
@@ -474,7 +468,6 @@ fun UserMessageBubble(msg: ChatMessage, isDark: Boolean, onEdit: (String) -> Uni
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Edit Button for User
             IconButton(onClick = { onEdit(msg.text ?: "") }, modifier = Modifier.size(28.dp).padding(end = 4.dp)) {
                 Icon(Icons.Outlined.Edit, "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
             }
@@ -501,8 +494,8 @@ fun AiMessageFooter(msg: ChatMessage, isDark: Boolean, onCopy: (String) -> Unit,
         IconButton(onClick = { onShare(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Share, "Share", tint = iconTint, modifier = Modifier.size(18.dp)) }
         IconButton(onClick = { onSpeak(text) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.VolumeUp, "Speak", tint = iconTint, modifier = Modifier.size(18.dp)) }
         Spacer(modifier = Modifier.width(8.dp))
-        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp)) }
-        IconButton(onClick = { /* Feedback Logic */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { /* Feedback */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbUp, "Like", tint = iconTint, modifier = Modifier.size(18.dp)) }
+        IconButton(onClick = { /* Feedback */ }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ThumbDown, "Dislike", tint = iconTint, modifier = Modifier.size(18.dp)) }
     }
 }
 
@@ -752,5 +745,5 @@ fun SidebarItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: 
     }
 }
 
-// Helper Extension
+// Helper
 fun Modifier.ifTrue(condition: Boolean, modifier: Modifier.() -> Modifier): Modifier = if (condition) then(modifier(Modifier)) else this
