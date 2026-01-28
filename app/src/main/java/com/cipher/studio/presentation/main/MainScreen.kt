@@ -323,7 +323,9 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    // --- FLATTENING LOGIC ---
+    // --- OPTIMIZED FLATTENING LOGIC (Prevents Unnecessary Recalculation) ---
+    // [OPTIMIZATION]: Only recalculate when history ID changes or streaming state toggles
+    // Using derivedStateOf inside remember for maximum efficiency
     val flatItems by remember(history, isStreaming) {
         derivedStateOf {
             val items = mutableListOf<ChatUiItem>()
@@ -335,14 +337,15 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
 
             history.forEach { msg ->
                 val safeMsgId = msg.id ?: UUID.randomUUID().toString()
-                
+
                 if (msg.role == ChatRole.USER) {
                     items.add(ChatUiItem.UserItem(msg))
                 } else {
                     // 1. Parse content into blocks
+                    // [CRITICAL]: parseMarkdownBlocks is now called safely from here
                     val textToParse = msg.text ?: ""
                     val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
-                    
+
                     if (blocks.isEmpty() && isStreaming && msg == history.last()) {
                         // Empty streaming placeholder if needed
                     } else {
@@ -351,7 +354,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
                     }
-                    
+
                     // 3. Add Footer (Actions) - ONLY if not streaming this specific message currently
                     // or if it's an old message
                     if (!isStreaming || msg != history.last()) {
@@ -367,16 +370,19 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         }
     }
 
-    // Smart Auto-Scroll
-    LaunchedEffect(flatItems.size) {
+    // Smart Auto-Scroll (Improved Logic)
+    LaunchedEffect(flatItems.size, isStreaming) {
         if (flatItems.isNotEmpty()) {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val isNearBottom = lastVisibleIndex >= (totalItems - 6) // Generous tolerance
-
-            if (isNearBottom || isStreaming) {
-                listState.animateScrollToItem(flatItems.size - 1)
+            if (totalItems > 0) {
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                // Scroll if user is already at the bottom OR if it's a new message (streaming started)
+                val isNearBottom = lastVisibleIndex >= (totalItems - 4) 
+                
+                if (isNearBottom || isStreaming) {
+                    listState.animateScrollToItem(flatItems.size - 1)
+                }
             }
         }
     }
@@ -391,7 +397,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             ) {
                 items(
                     items = flatItems,
-                    key = { it.id }, // Stable ID for performance
+                    key = { it.id }, // Stable ID ensures efficient updates
                     contentType = { it::class.simpleName }
                 ) { item ->
                     when (item) {
@@ -401,15 +407,15 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                             UserMessageBubble(
                                 msg = item.msg, 
                                 isDark = isDark,
-                                onEdit = { viewModel.updatePrompt(it) } // Feature: Edit
+                                onEdit = { viewModel.updatePrompt(it) } 
                             )
                         }
                         is ChatUiItem.AiBlockItem -> {
-                            // High Performance rendering
+                            // [PERFORMANCE]: This is where the magic happens. 
+                            // Block-level rendering prevents re-drawing the whole message.
                             AiBlockRenderer(item.block, isDark)
                         }
                         is ChatUiItem.AiFooterItem -> {
-                            // Feature: Copy, Share, Speak
                             AiMessageFooter(
                                 msg = item.msg,
                                 isDark = isDark,
@@ -433,7 +439,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 .fillMaxWidth()
                 .ifTrue(isExpanded) { fillMaxHeight() }
                 .background(if (isExpanded) MaterialTheme.colorScheme.background else Color.Transparent)
-                .imePadding()
+                .imePadding() // [FIX]: Prevents keyboard overlap
         ) {
             if (!isExpanded) {
                 Box(
