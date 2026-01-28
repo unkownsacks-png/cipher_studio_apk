@@ -1,6 +1,6 @@
 package com.cipher.studio.presentation.components
 
-import android.widget.Toast
+import android.util.Log
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,9 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.BrokenImage
-import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,17 +45,15 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 
 /**
- * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (FINAL PRO VERSION)
- * 
- * FEATURES:
- * 1. Robust Parser: Handles unclosed code blocks, messy tables, and mixed content.
- * 2. Amharic Optimization: Increased LineHeight for readability.
- * 3. Performance: Flattened architecture with Stable IDs to prevent re-composition lag.
- * 4. Aesthetics: macOS style code blocks, clean tables, and styled text.
+ * CIPHER STUDIO: ULTIMATE MARKDOWN RENDERER (BULLETPROOF VERSION)
+ *
+ * FIXED: 
+ * 1. Added Try-Catch blocks around all regex and parsing logic to prevent crashes.
+ * 2. Handles incomplete streaming markdown gracefully.
+ * 3. Prevents IndexOutOfBoundsException on complex nested styles.
  */
 
 // --- COMPATIBILITY WRAPPER ---
-// This allows other parts of the app to use MarkdownRenderer as a single composable if needed.
 @Composable
 fun MarkdownRenderer(
     content: String,
@@ -64,11 +61,10 @@ fun MarkdownRenderer(
     isStreaming: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Generate a static ID for this rendering session to avoid UI flickering
+    // Generate a static ID to avoid UI flickering
     val baseId = remember { UUID.randomUUID().toString() }
     val blocks = parseMarkdownBlocks(content, baseId)
 
-    // Using Column ensures NO nested scroll crash inside ChatView's LazyColumn
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -81,7 +77,7 @@ fun MarkdownRenderer(
 
 // --- DATA STRUCTURES (Stable IDs) ---
 sealed class MarkdownBlock {
-    abstract val id: String 
+    abstract val id: String
 
     data class Header(val text: String, val level: Int, override val id: String) : MarkdownBlock()
     data class Text(val content: String, override val id: String) : MarkdownBlock()
@@ -96,152 +92,168 @@ sealed class MarkdownBlock {
     }
 }
 
-// --- ROBUST PARSER LOGIC ---
+// --- BULLETPROOF PARSER LOGIC ---
 fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
+    
+    // Safety check: Empty text
+    if (text.isBlank()) return emptyList()
+
     val lines = text.lines()
     var i = 0
     var blockIndex = 0
 
-    // Helper for deterministic IDs
     fun getStableId() = "${baseId}_blk_${blockIndex++}"
 
     while (i < lines.size) {
-        val line = lines[i]
-        val trimmed = line.trim()
+        try {
+            val line = lines[i]
+            val trimmed = line.trim()
 
-        // 1. CODE BLOCK (Robust: Handles unclosed blocks)
-        if (trimmed.startsWith("```")) {
-            val language = trimmed.removePrefix("```").trim()
-            val codeBuilder = StringBuilder()
-            i++ // Skip opening line
-            
-            var foundClosing = false
-            while (i < lines.size) {
-                if (lines[i].trim().startsWith("```")) {
-                    foundClosing = true
-                    i++ // Skip closing line
-                    break
-                }
-                codeBuilder.append(lines[i]).append("\n")
-                i++
-            }
-            // Even if closing is missing (streaming interrupted), render what we have
-            blocks.add(MarkdownBlock.Code(language, codeBuilder.toString().trimEnd(), getStableId()))
-            continue
-        }
-
-        // 2. TABLE (Robust: Checks for separator line)
-        if (trimmed.startsWith("|")) {
-            // Check if next line is a separator (---) to confirm it's a table
-            if (i + 1 < lines.size && lines[i+1].trim().contains("---")) {
-                val tableRows = mutableListOf<List<String>>()
-                while (i < lines.size && lines[i].trim().startsWith("|")) {
-                    val rowContent = lines[i].trim()
-                    // Filter out separator lines
-                    if (!rowContent.contains("---")) {
-                        val cells = rowContent.split("|")
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() } // Remove empty splits from ends
-                        if (cells.isNotEmpty()) {
-                            tableRows.add(cells)
-                        }
+            // 1. CODE BLOCK
+            if (trimmed.startsWith("```")) {
+                val language = trimmed.removePrefix("```").trim()
+                val codeBuilder = StringBuilder()
+                i++ 
+                
+                while (i < lines.size) {
+                    if (lines[i].trim().startsWith("```")) {
+                        i++ 
+                        break
                     }
+                    codeBuilder.append(lines[i]).append("\n")
                     i++
                 }
-                if (tableRows.isNotEmpty()) {
-                    blocks.add(MarkdownBlock.Table(tableRows, getStableId()))
-                    continue
+                blocks.add(MarkdownBlock.Code(language, codeBuilder.toString().trimEnd(), getStableId()))
+                continue
+            }
+
+            // 2. TABLE
+            if (trimmed.startsWith("|")) {
+                // Peek next line safely
+                if (i + 1 < lines.size && lines[i+1].trim().contains("---")) {
+                    val tableRows = mutableListOf<List<String>>()
+                    while (i < lines.size && lines[i].trim().startsWith("|")) {
+                        val rowContent = lines[i].trim()
+                        if (!rowContent.contains("---")) {
+                            val cells = rowContent.split("|")
+                                .map { it.trim() }
+                                .filter { it.isNotEmpty() }
+                            if (cells.isNotEmpty()) {
+                                tableRows.add(cells)
+                            }
+                        }
+                        i++
+                    }
+                    if (tableRows.isNotEmpty()) {
+                        blocks.add(MarkdownBlock.Table(tableRows, getStableId()))
+                        continue
+                    }
                 }
             }
-        }
 
-        // 3. HORIZONTAL RULE
-        if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
-            blocks.add(MarkdownBlock.Rule)
-            i++
-            continue
-        }
-
-        // 4. TASK LIST
-        val taskRegex = Regex("^[-*]\\s\\[([ xX])\\]\\s(.*)")
-        val taskMatch = taskRegex.find(trimmed)
-        if (taskMatch != null) {
-            val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
-            val content = taskMatch.groupValues[2]
-            blocks.add(MarkdownBlock.TaskItem(content, isChecked, getStableId()))
-            i++
-            continue
-        }
-
-        // 5. LISTS (Ordered & Unordered)
-        // Unordered (*, -, +)
-        if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
-            val content = trimmed.substring(2).trim()
-            blocks.add(MarkdownBlock.ListItem(content, isOrdered = false, getStableId()))
-            i++
-            continue
-        }
-        // Ordered (1., 2.)
-        val orderedRegex = Regex("^\\d+\\.\\s(.*)")
-        val orderedMatch = orderedRegex.find(trimmed)
-        if (orderedMatch != null) {
-            blocks.add(MarkdownBlock.ListItem(orderedMatch.groupValues[1], isOrdered = true, getStableId()))
-            i++
-            continue
-        }
-
-        // 6. HEADERS
-        if (trimmed.startsWith("#")) {
-            val level = trimmed.takeWhile { it == '#' }.length
-            val content = trimmed.removePrefix("#".repeat(level)).trim()
-            blocks.add(MarkdownBlock.Header(content, level, getStableId()))
-            i++
-            continue
-        }
-
-        // 7. BLOCK QUOTES
-        if (trimmed.startsWith(">")) {
-            val content = trimmed.removePrefix(">").trim()
-            blocks.add(MarkdownBlock.Quote(content, getStableId()))
-            i++
-            continue
-        }
-
-        // 8. IMAGES
-        val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
-        if (imgMatch != null) {
-            blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1], getStableId()))
-            i++
-            continue
-        }
-
-        // 9. REGULAR TEXT (Paragraph Accumulation)
-        val textBuilder = StringBuilder()
-        while (i < lines.size) {
-            val nextTrim = lines[i].trim()
-            // Stop if we hit a special block
-            if (nextTrim.startsWith("```") || 
-                (nextTrim.startsWith("|") && i + 1 < lines.size && lines[i+1].contains("---")) || // Strict table check
-                nextTrim.startsWith("#") || 
-                nextTrim.startsWith(">") || 
-                nextTrim == "---" || 
-                nextTrim.startsWith("- [") || 
-                nextTrim.startsWith("* ") || 
-                nextTrim.startsWith("- ") || 
-                nextTrim.matches(Regex("^\\d+\\..*"))) {
-                break
+            // 3. HORIZONTAL RULE
+            if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
+                blocks.add(MarkdownBlock.Rule)
+                i++
+                continue
             }
 
-            textBuilder.append(lines[i]).append("\n")
-            i++
-        }
-        
-        if (textBuilder.isNotEmpty()) {
-            blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd(), getStableId()))
-        } else if (i < lines.size && lines[i].isBlank()) {
-            // Skip empty lines between blocks
-            i++
+            // 4. TASK LIST
+            val taskRegex = Regex("^[-*]\\s\\[([ xX])\\]\\s(.*)")
+            val taskMatch = taskRegex.find(trimmed)
+            if (taskMatch != null) {
+                val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
+                val content = taskMatch.groupValues[2]
+                blocks.add(MarkdownBlock.TaskItem(content, isChecked, getStableId()))
+                i++
+                continue
+            }
+
+            // 5. LISTS
+            if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
+                val content = trimmed.substring(2).trim()
+                blocks.add(MarkdownBlock.ListItem(content, isOrdered = false, getStableId()))
+                i++
+                continue
+            }
+            val orderedRegex = Regex("^\\d+\\.\\s(.*)")
+            val orderedMatch = orderedRegex.find(trimmed)
+            if (orderedMatch != null) {
+                blocks.add(MarkdownBlock.ListItem(orderedMatch.groupValues[1], isOrdered = true, getStableId()))
+                i++
+                continue
+            }
+
+            // 6. HEADERS
+            if (trimmed.startsWith("#")) {
+                val level = trimmed.takeWhile { it == '#' }.length
+                val content = trimmed.removePrefix("#".repeat(level)).trim()
+                blocks.add(MarkdownBlock.Header(content, level, getStableId()))
+                i++
+                continue
+            }
+
+            // 7. BLOCK QUOTES
+            if (trimmed.startsWith(">")) {
+                val content = trimmed.removePrefix(">").trim()
+                blocks.add(MarkdownBlock.Quote(content, getStableId()))
+                i++
+                continue
+            }
+
+            // 8. IMAGES
+            // Try-catch specific to regex to avoid crashes on partial streaming
+            try {
+                val imgMatch = Regex("^!\\[(.*?)\\]\\((.*?)\\)$").find(trimmed)
+                if (imgMatch != null) {
+                    blocks.add(MarkdownBlock.Image(imgMatch.groupValues[2], imgMatch.groupValues[1], getStableId()))
+                    i++
+                    continue
+                }
+            } catch (e: Exception) {
+                // Ignore regex error and treat as text
+            }
+
+            // 9. REGULAR TEXT
+            val textBuilder = StringBuilder()
+            while (i < lines.size) {
+                val nextTrim = lines[i].trim()
+                if (nextTrim.startsWith("```") || 
+                    (nextTrim.startsWith("|") && i + 1 < lines.size && lines[i+1].contains("---")) || 
+                    nextTrim.startsWith("#") || 
+                    nextTrim.startsWith(">") || 
+                    nextTrim == "---" || 
+                    nextTrim.startsWith("- [") || 
+                    nextTrim.startsWith("* ") || 
+                    nextTrim.startsWith("- ") || 
+                    nextTrim.matches(Regex("^\\d+\\..*"))) {
+                    break
+                }
+                textBuilder.append(lines[i]).append("\n")
+                i++
+            }
+            
+            if (textBuilder.isNotEmpty()) {
+                blocks.add(MarkdownBlock.Text(textBuilder.toString().trimEnd(), getStableId()))
+            } else if (i < lines.size && lines[i].isBlank()) {
+                i++
+            }
+
+        } catch (e: Exception) {
+            // GLOBAL SAFETY NET: If any line crashes the parser, skip the line or render as text
+            // instead of crashing the app.
+            Log.e("MarkdownParser", "Error parsing line $i: ${e.message}")
+            try {
+                if (i < lines.size) {
+                    blocks.add(MarkdownBlock.Text(lines[i], getStableId()))
+                    i++
+                } else {
+                    break
+                }
+            } catch (e2: Exception) {
+                break // Give up if fallback fails
+            }
         }
     }
     return blocks
@@ -252,7 +264,6 @@ fun parseMarkdownBlocks(text: String, baseId: String): List<MarkdownBlock> {
 fun AiBlockRenderer(block: MarkdownBlock, isDark: Boolean) {
     val theme = if(isDark) Theme.DARK else Theme.LIGHT
     
-    // Column wrapper ensures each block takes full width
     Column(modifier = Modifier.fillMaxWidth()) {
         when (block) {
             is MarkdownBlock.Header -> MarkdownHeader(block.text, block.level, theme)
@@ -301,10 +312,9 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
             .fillMaxWidth()
             .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E)) // Always dark background for code looks better
+            .background(Color(0xFF1E1E1E))
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
     ) {
-        // Mac-OS Style Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -314,18 +324,17 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFF5F56), CircleShape)) // Red
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFF5F56), CircleShape))
                 Spacer(modifier = Modifier.width(6.dp))
-                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFFBD2E), CircleShape)) // Yellow
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFFFFBD2E), CircleShape))
                 Spacer(modifier = Modifier.width(6.dp))
-                Box(modifier = Modifier.size(10.dp).background(Color(0xFF27C93F), CircleShape)) // Green
+                Box(modifier = Modifier.size(10.dp).background(Color(0xFF27C93F), CircleShape))
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = language.ifEmpty { "CODE" }.uppercase(),
                     style = TextStyle(color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                 )
             }
-            // Copy Button
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
@@ -346,7 +355,6 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
             }
         }
 
-        // Scrollable Code Content
         SelectionContainer {
             Box(
                 modifier = Modifier
@@ -360,7 +368,7 @@ fun EliteCodeBlock(language: String, code: String, isDark: Boolean) {
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         lineHeight = 20.sp,
-                        color = Color(0xFFC9D1D9) // Light grey text for code
+                        color = Color(0xFFC9D1D9)
                     )
                 )
             }
@@ -426,44 +434,33 @@ fun MarkdownTaskItem(content: String, isChecked: Boolean, theme: Theme) {
     }
 }
 
-// --- ROBUST SYNTAX HIGHLIGHTER ---
+// --- SAFEST SYNTAX HIGHLIGHTER ---
 fun syntaxHighlight(code: String): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
-        val str = code
-        // Extended Keywords List
-        val keywords = listOf(
-            "fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", 
-            "package", "import", "def", "function", "const", "let", "echo", "cd", "sudo", 
-            "docker", "pip", "npm", "public", "private", "protected", "void", "int", "string", "boolean"
-        )
-        
-        val keywordsRegex = "\\b(${keywords.joinToString("|")})\\b".toRegex()
-        val stringRegex = "\".*?\"|\'.*?\'".toRegex() // Handle single and double quotes
-        val numberRegex = "\\b\\d+\\b".toRegex()
-        val commentRegex = "//.*|#.*|/\\*.*?\\*/".toRegex(RegexOption.DOT_MATCHES_ALL) // Handle multi-line comments too
+        append(code) // Base text first
 
-        append(str)
-
-        // Apply Styles (Order matters slightly for overlapping)
         try {
-            // Strings (Green)
-            stringRegex.findAll(str).forEach { match ->
-                addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
+            val keywords = listOf("fun", "val", "var", "return", "if", "else", "for", "while", "class", "object", "package", "import", "def", "function", "const", "let", "echo", "cd", "sudo", "docker", "pip", "npm", "public", "private", "protected", "void", "int", "string", "boolean")
+            val keywordsRegex = "\\b(${keywords.joinToString("|")})\\b".toRegex()
+            val stringRegex = "\".*?\"|\'.*?\'".toRegex()
+            val numberRegex = "\\b\\d+\\b".toRegex()
+            val commentRegex = "//.*|#.*|/\\*.*?\\*/".toRegex(RegexOption.DOT_MATCHES_ALL)
+
+            // Safe application of styles
+            stringRegex.findAll(code).forEach { match ->
+                if (match.range.last < length) addStyle(SpanStyle(color = Color(0xFFA5D6FF)), match.range.first, match.range.last + 1)
             }
-            // Keywords (Redish/Orange)
-            keywordsRegex.findAll(str).forEach { match ->
-                addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
+            keywordsRegex.findAll(code).forEach { match ->
+                if (match.range.last < length) addStyle(SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
             }
-            // Numbers (Blue)
-            numberRegex.findAll(str).forEach { match ->
-                addStyle(SpanStyle(color = Color(0xFF79C0FF)), match.range.first, match.range.last + 1)
+            numberRegex.findAll(code).forEach { match ->
+                if (match.range.last < length) addStyle(SpanStyle(color = Color(0xFF79C0FF)), match.range.first, match.range.last + 1)
             }
-            // Comments (Grey)
-            commentRegex.findAll(str).forEach { match ->
-                addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
+            commentRegex.findAll(code).forEach { match ->
+                if (match.range.last < length) addStyle(SpanStyle(color = Color(0xFF8B949E)), match.range.first, match.range.last + 1)
             }
         } catch (e: Exception) {
-            // Fallback if regex fails on massive strings
+            // If syntax highlighting fails, we just show plain code. No crash.
         }
     }
 }
@@ -488,10 +485,7 @@ fun EliteImage(url: String, alt: String) {
         },
         error = {
             Column(
-                modifier = Modifier
-                    .height(150.dp)
-                    .fillMaxWidth()
-                    .background(Color.Gray.copy(alpha = 0.1f)),
+                modifier = Modifier.height(150.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -504,7 +498,7 @@ fun EliteImage(url: String, alt: String) {
     )
 }
 
-// --- STYLED TEXT (With Amharic Line-Height Fix) ---
+// --- STYLED TEXT (With Crash Protection) ---
 @Composable
 fun StyledText(
     text: String,
@@ -515,44 +509,40 @@ fun StyledText(
 ) {
     val uriHandler = LocalUriHandler.current
     val color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F)
-    
-    // AMHARIC OPTIMIZATION: Increased line height to prevent clipping of top/bottom characters
     val lineHeight = 32.sp 
 
     val annotatedString = remember(text, isDark) {
-        buildAnnotatedString {
-            // Regex for Links [text](url)
-            val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
-            var lastIndex = 0
+        try {
+            buildAnnotatedString {
+                val linkRegex = "\\[([^\\]]+)\\]\\(([^\\)]+)\\)".toRegex()
+                var lastIndex = 0
 
-            linkRegex.findAll(text).forEach { matchResult ->
-                val start = matchResult.range.first
-                val end = matchResult.range.last + 1
-                val linkText = matchResult.groupValues[1]
-                val linkUrl = matchResult.groupValues[2]
+                linkRegex.findAll(text).forEach { matchResult ->
+                    val start = matchResult.range.first
+                    val end = matchResult.range.last + 1
+                    
+                    if (start > lastIndex) {
+                        appendStyles(text.substring(lastIndex, start), isDark)
+                    }
 
-                // Append text before link
-                appendStyles(text.substring(lastIndex, start), isDark)
+                    val linkText = matchResult.groupValues[1]
+                    val linkUrl = matchResult.groupValues[2]
 
-                // Append Link
-                pushStringAnnotation(tag = "URL", annotation = linkUrl)
-                withStyle(
-                    SpanStyle(
-                        color = Color(0xFF3B82F6),
-                        textDecoration = TextDecoration.Underline,
-                        fontWeight = FontWeight.Medium
-                    )
-                ) {
-                    append(linkText)
+                    pushStringAnnotation(tag = "URL", annotation = linkUrl)
+                    withStyle(SpanStyle(color = Color(0xFF3B82F6), textDecoration = TextDecoration.Underline, fontWeight = FontWeight.Medium)) {
+                        append(linkText)
+                    }
+                    pop()
+                    lastIndex = end
                 }
-                pop()
-                lastIndex = end
-            }
 
-            // Append remaining text
-            if (lastIndex < text.length) {
-                appendStyles(text.substring(lastIndex), isDark)
+                if (lastIndex < text.length) {
+                    appendStyles(text.substring(lastIndex), isDark)
+                }
             }
+        } catch (e: Exception) {
+            // Fallback to plain text if parsing crashes
+            buildAnnotatedString { append(text) }
         }
     }
 
@@ -567,46 +557,49 @@ fun StyledText(
             textDecoration = if (isStrikethrough) TextDecoration.LineThrough else TextDecoration.None
         ),
         onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    try {
+            try {
+                annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                    .firstOrNull()?.let { annotation ->
                         uriHandler.openUri(annotation.item)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
                     }
-                }
+            } catch (e: Exception) {
+                // Ignore click errors
+            }
         }
     )
 }
 
-// --- HELPER: RECURSIVE STYLE PARSER ---
+// --- HELPER: SAFE STYLE PARSER ---
 fun androidx.compose.ui.text.AnnotatedString.Builder.appendStyles(rawText: String, isDark: Boolean) {
-    // Matches: `code`, **bold**, *italic*, ~~strike~~
-    val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
-    var lastIndex = 0
+    try {
+        val pattern = "(`[^`]+`|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~)".toRegex()
+        var lastIndex = 0
 
-    pattern.findAll(rawText).forEach { match ->
-        append(rawText.substring(lastIndex, match.range.first))
-        val content = match.value
-        when {
-            content.startsWith("`") -> {
-                val cleanText = content.removeSurrounding("`")
-                withStyle(
-                    SpanStyle(
-                        background = if (isDark) Color(0xFF3E3E3E) else Color(0xFFE5E7EB),
-                        color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    )
-                ) { append(" $cleanText ") }
+        pattern.findAll(rawText).forEach { match ->
+            if (match.range.first > lastIndex) {
+                append(rawText.substring(lastIndex, match.range.first))
             }
-            content.startsWith("**") -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.removeSurrounding("**")) }
-            content.startsWith("*") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.removeSurrounding("*")) }
-            content.startsWith("~~") -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.removeSurrounding("~~")) }
+            
+            val content = match.value
+            when {
+                content.startsWith("`") -> {
+                    val cleanText = content.removeSurrounding("`")
+                    withStyle(SpanStyle(background = if (isDark) Color(0xFF3E3E3E) else Color(0xFFE5E7EB), color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F), fontFamily = FontFamily.Monospace, fontSize = 14.sp)) { 
+                        append(" $cleanText ") 
+                    }
+                }
+                content.startsWith("**") -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(content.removeSurrounding("**")) }
+                content.startsWith("*") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(content.removeSurrounding("*")) }
+                content.startsWith("~~") -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(content.removeSurrounding("~~")) }
+            }
+            lastIndex = match.range.last + 1
         }
-        lastIndex = match.range.last + 1
+        if (lastIndex < rawText.length) {
+            append(rawText.substring(lastIndex))
+        }
+    } catch (e: Exception) {
+        append(rawText) // Fallback
     }
-    append(rawText.substring(lastIndex))
 }
 
 // --- MARKDOWN TABLE ---
