@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -290,17 +292,19 @@ fun GeminiTopBar(currentView: ViewMode, modelName: String, onMenuClick: () -> Un
     }
 }
 
-// --- FLATTENED UI ITEM WRAPPER (Critical for Performance) ---
+// --- FLATTENED UI ITEM WRAPPER ---
+// [RADICAL UPDATE]: Added StreamingRawItem to bypass parser crash
 sealed class ChatUiItem(val id: String) {
     data class UserItem(val msg: ChatMessage) : ChatUiItem(msg.id ?: UUID.randomUUID().toString())
     data class AiBlockItem(val block: MarkdownBlock, val msgId: String) : ChatUiItem(block.id)
+    data class StreamingRawItem(val content: String, val msgId: String) : ChatUiItem("stream_raw_$msgId")
     data class AiFooterItem(val msg: ChatMessage) : ChatUiItem("${msg.id}_footer")
     data class LoadingItem(val msgId: String) : ChatUiItem("loading_$msgId")
     data class Greeting(val idVal: String = "header") : ChatUiItem(idVal)
     data class Suggestions(val idVal: String = "suggestions") : ChatUiItem(idVal)
 }
 
-// --- CHAT VIEW (THE ENGINE - ASYNC EDITION) ---
+// --- CHAT VIEW (THE HYBRID ENGINE) ---
 @Composable
 fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
     val history by viewModel.history.collectAsState()
@@ -321,13 +325,11 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
         if (isGranted) viewModel.toggleVoiceInput() else Toast.makeText(context, "Permission needed for Voice", Toast.LENGTH_SHORT).show()
     }
 
-    // --- [THE ULTIMATE FIX: ASYNC PROCESSING] ---
-    // Instead of doing heavy parsing on the main thread (derivedStateOf),
-    // we use 'produceState' with 'Dispatchers.Default' (Background Thread).
-    // This ensures the UI NEVER freezes, no matter how complex the markdown is.
-    val flatItems by produceState<List<ChatUiItem>>(initialValue = emptyList(), key1 = history, key2 = isStreaming) {
-        // Switch to Background Thread for Heavy Calculation
-        withContext(Dispatchers.Default) {
+    // --- HYBRID RENDERING LOGIC (THE CRASH FIX) ---
+    // Rule 1: Old messages get Full Markdown (Parsed safely in background).
+    // Rule 2: The ACTIVE streaming message gets Raw Text (No Parser = No Crash).
+    val flatItems by remember(history, isStreaming) {
+        derivedStateOf {
             val items = mutableListOf<ChatUiItem>()
 
             if (history.isEmpty()) {
@@ -341,32 +343,25 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                 if (msg.role == ChatRole.USER) {
                     items.add(ChatUiItem.UserItem(msg))
                 } else {
-                    // HEAVY LIFTING HAPPENS HERE (OFF THE UI THREAD)
-                    val textToParse = msg.text ?: ""
-                    
-                    // Optimization: If it's a huge text, we don't want to block the Coroutine either
-                    // but since it's Dispatchers.Default, it's safe.
-                    val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
+                    // [RADICAL FIX]: Is this the active streaming message?
+                    val isActiveStream = isStreaming && msg == history.last()
 
-                    if (blocks.isEmpty() && isStreaming && msg == history.last()) {
-                        // Placeholder
+                    if (isActiveStream) {
+                        // MODE 1: SAFE RAW STREAMING (Zero Crash Probability)
+                        items.add(ChatUiItem.StreamingRawItem(msg.text ?: "...", safeMsgId))
                     } else {
+                        // MODE 2: ELITE MARKDOWN (Parsed when finished/stable)
+                        val textToParse = msg.text ?: ""
+                        val blocks = parseMarkdownBlocks(textToParse, safeMsgId)
+                        
                         blocks.forEach { block ->
                             items.add(ChatUiItem.AiBlockItem(block, safeMsgId))
                         }
-                    }
-
-                    if (!isStreaming || msg != history.last()) {
                         items.add(ChatUiItem.AiFooterItem(msg))
                     }
                 }
             }
-            if (isStreaming) {
-                items.add(ChatUiItem.LoadingItem(history.lastOrNull()?.id ?: "stream"))
-            }
-            
-            // Send the calculated list back to the UI
-            value = items
+            items
         }
     }
 
@@ -377,7 +372,7 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
             val totalItems = layoutInfo.totalItemsCount
             if (totalItems > 0) {
                 val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                val isNearBottom = lastVisibleIndex >= (totalItems - 5) 
+                val isNearBottom = lastVisibleIndex >= (totalItems - 4) 
                 
                 if (isNearBottom || isStreaming) {
                     listState.animateScrollToItem(flatItems.size - 1)
@@ -409,7 +404,23 @@ fun ChatView(viewModel: MainViewModel, isDark: Boolean) {
                                 onEdit = { viewModel.updatePrompt(it) } 
                             )
                         }
+                        is ChatUiItem.StreamingRawItem -> {
+                            // [SAFE RENDERER]: Used ONLY during streaming
+                            SelectionContainer {
+                                Text(
+                                    text = item.content,
+                                    style = TextStyle(
+                                        fontSize = 16.sp,
+                                        lineHeight = 24.sp,
+                                        color = if (isDark) Color(0xFFE3E3E3) else Color(0xFF1F1F1F),
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                    ),
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
                         is ChatUiItem.AiBlockItem -> {
+                            // [FULL RENDERER]: Used ONLY after streaming finishes
                             AiBlockRenderer(item.block, isDark)
                         }
                         is ChatUiItem.AiFooterItem -> {
