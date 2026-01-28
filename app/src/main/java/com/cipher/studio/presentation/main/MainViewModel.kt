@@ -70,11 +70,11 @@ class MainViewModel @Inject constructor(
     private val _isInputExpanded = MutableStateFlow(false)
     val isInputExpanded = _isInputExpanded.asStateFlow()
 
-    // For the Top Bar Badge (Shows current active brain)
+    // For the Top Bar Badge
     private val _currentModelName = MutableStateFlow("Cipher 1.0 Ultra") 
     val currentModelName = _currentModelName.asStateFlow()
 
-    // Suggestion Chips (To fill the dead space)
+    // Suggestion Chips
     val suggestionChips = listOf(
         "Generate Kotlin Code",
         "Analyze this UI",
@@ -129,7 +129,6 @@ class MainViewModel @Inject constructor(
 
                     override fun onError(error: Int) {
                         _isVoiceActive.value = false
-                        // Handle error silently or update UI state if needed
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -137,7 +136,6 @@ class MainViewModel @Inject constructor(
                         if (!matches.isNullOrEmpty()) {
                             val spokenText = matches[0]
                             val currentText = _prompt.value
-                            // Smart append: adds space if needed
                             _prompt.value = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
                         }
                         _isVoiceActive.value = false
@@ -149,13 +147,12 @@ class MainViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fail gracefully if device doesn't support speech
         }
     }
 
     fun toggleVoiceInput() {
         if (speechRecognizer == null) {
-            initSpeechRecognizer() // Retry init if failed previously
+            initSpeechRecognizer() 
         }
 
         if (_isVoiceActive.value) {
@@ -189,8 +186,6 @@ class MainViewModel @Inject constructor(
     // --- CONFIGURATION & MODEL SWITCHING ---
     fun updateConfig(newConfig: ModelConfig) {
         _config.value = newConfig
-
-        // Update Badge Name based on model selection
         val name = newConfig.model.name.lowercase() 
 
         _currentModelName.value = when {
@@ -222,15 +217,14 @@ class MainViewModel @Inject constructor(
         _config.value = session.config
         _isSidebarOpen.value = false
         _isInputExpanded.value = false 
-        // Sync model name when loading session
         updateConfig(session.config)
     }
 
     fun deleteSession(sessionId: String) {
         val updatedList = _sessions.value.filter { it.id != sessionId }
         _sessions.value = updatedList
-        
-        // FIXED: Run heavy database operation on IO thread to prevent UI freeze
+
+        // [FIX]: Run heavy database operation on IO thread to prevent UI freeze
         viewModelScope.launch(Dispatchers.IO) {
             storageManager.saveSessions(updatedList)
         }
@@ -257,8 +251,9 @@ class MainViewModel @Inject constructor(
             }
             // Update UI State immediately (Fast)
             _sessions.value = updatedList
-            
-            // FIXED: Heavy JSON Serialization/Writing moved to Background Thread (IO)
+
+            // [CRITICAL FIX]: Heavy JSON Serialization/Writing moved to Background Thread (IO)
+            // This prevents "TransactionTooLargeException" and ANRs
             viewModelScope.launch(Dispatchers.IO) {
                 storageManager.saveSessions(updatedList)
             }
@@ -328,8 +323,9 @@ class MainViewModel @Inject constructor(
                 when (result) {
                     is StreamResult.Content -> {
                         fullResponse.append(result.text)
-                        
-                        // THROTTLING: Only update UI if > 100ms has passed
+
+                        // [CRITICAL FIX]: THROTTLING
+                        // Only update UI if > 100ms has passed. This prevents state thrashing.
                         val currentTime = System.currentTimeMillis()
                         if (currentTime - lastUiUpdate >= 100) {
                             updateLastMessage(fullResponse.toString())
@@ -345,7 +341,7 @@ class MainViewModel @Inject constructor(
                     else -> {}
                 }
             }
-            
+
             // FINAL UPDATE: Ensure the complete text is shown (in case the last chunk was throttled)
             updateLastMessage(fullResponse.toString())
             _isStreaming.value = false
@@ -371,6 +367,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun addAttachment(uri: Uri) {
+        // [FIX]: Image processing moved to IO Thread
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val context = application.applicationContext
