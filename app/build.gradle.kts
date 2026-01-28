@@ -25,7 +25,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true // ኮዱን ያጠቅዋል (ለ Security ጥሩ ነው)
+            isMinifyEnabled = true // ኮዱን ያጠቅዋል (ለ Security አሪፍ ነው)
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
