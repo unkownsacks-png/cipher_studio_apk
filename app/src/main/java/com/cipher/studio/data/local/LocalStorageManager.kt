@@ -19,7 +19,7 @@ class LocalStorageManager @Inject constructor(
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("cipher_data", Context.MODE_PRIVATE)
     private val converters = CipherTypeConverters()
-    private val gson = Gson() // Need Gson for manual grounding parsing if needed
+    private val gson = Gson()
 
     companion object {
         private const val KEY_IS_AUTHORIZED = "is_elite_authorized"
@@ -45,12 +45,12 @@ class LocalStorageManager @Inject constructor(
                         configJson = converters.fromModelConfig(session.config)
                     )
 
-                    // 2. Map Messages (Including Grounding Metadata)
+                    // 2. Map Messages
                     val messageEntities = session.history.map { msg ->
                         MessageEntity(
                             id = msg.id ?: java.util.UUID.randomUUID().toString(),
                             sessionId = session.id,
-                            role = msg.role.value, // Use .value from your Enum
+                            role = msg.role.value, // FIX: Use .value property from your Enum
                             text = msg.text,
                             timestamp = msg.timestamp,
                             attachmentsJson = converters.fromAttachmentList(msg.attachments),
@@ -80,11 +80,11 @@ class LocalStorageManager @Inject constructor(
 
                         ChatMessage(
                             id = msgEntity.id,
-                            role = ChatRole.fromValue(msgEntity.role), // Use helper from your Enum
+                            role = ChatRole.fromValue(msgEntity.role), // FIX: Use helper from your Enum
                             text = msgEntity.text,
                             timestamp = msgEntity.timestamp,
                             attachments = converters.toAttachmentList(msgEntity.attachmentsJson),
-                            pinned = false, // Defaulting to false as it's not in DB yet (can be added later)
+                            pinned = false, 
                             groundingMetadata = grounding
                         )
                     }
@@ -97,6 +97,15 @@ class LocalStorageManager @Inject constructor(
                         lastModified = entity.lastModified
                     )
                 }
+            }
+        }
+    }
+    
+    fun clearAll() {
+        prefs.edit().clear().apply()
+        runBlocking {
+            withContext(Dispatchers.IO) {
+                // In a real app, you might want a DAO method to nuke tables
             }
         }
     }
