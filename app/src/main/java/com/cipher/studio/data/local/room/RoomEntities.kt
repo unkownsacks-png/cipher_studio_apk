@@ -17,7 +17,7 @@ data class SessionEntity(
     @PrimaryKey val id: String,
     val title: String,
     val lastModified: Long,
-    val configJson: String // Stores ModelConfig (including ModelName)
+    val configJson: String // Stores ModelConfig (includes ModelName Enum)
 )
 
 // --- 2. MESSAGE TABLE ---
@@ -36,14 +36,14 @@ data class SessionEntity(
 data class MessageEntity(
     @PrimaryKey val id: String,
     val sessionId: String,
-    val role: String, // "user" or "model"
+    val role: String, // We will store ChatRole.value ("user" or "model")
     val text: String,
     val timestamp: Long,
-    val attachmentsJson: String, // JSON for List<Attachment>
-    val groundingJson: String?   // JSON for GroundingMetadata (New!)
+    val attachmentsJson: String, // List<Attachment>
+    val groundingJson: String?   // NEW: For GroundingMetadata
 )
 
-// --- 3. CONVERTERS (The Bridge) ---
+// --- 3. CONVERTERS (Critical for fixing the error) ---
 class CipherTypeConverters {
     private val gson = Gson()
 
