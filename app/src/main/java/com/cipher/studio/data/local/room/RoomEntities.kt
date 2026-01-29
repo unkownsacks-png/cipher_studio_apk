@@ -7,23 +7,20 @@ import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import com.cipher.studio.domain.model.AppConstants
 import com.cipher.studio.domain.model.Attachment
-import com.cipher.studio.domain.model.ChatRole
 import com.cipher.studio.domain.model.ModelConfig
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
-// --- 1. SESSION TABLE (Lightweight) ---
-// ይህ Sidebar ላይ የሚታየውን መረጃ ብቻ ይይዛል።
+// --- 1. SESSION TABLE ---
 @Entity(tableName = "sessions")
 data class SessionEntity(
     @PrimaryKey val id: String,
     val title: String,
     val lastModified: Long,
-    val configJson: String // ModelConfig stored as JSON
+    val configJson: String // Stores ModelConfig (including ModelName)
 )
 
-// --- 2. MESSAGE TABLE (Heavyweight) ---
-// መልዕክቶች እና ምስሎች እዚህ ይቀመጣሉ።
+// --- 2. MESSAGE TABLE ---
 @Entity(
     tableName = "messages",
     foreignKeys = [
@@ -31,22 +28,22 @@ data class SessionEntity(
             entity = SessionEntity::class,
             parentColumns = ["id"],
             childColumns = ["sessionId"],
-            onDelete = ForeignKey.CASCADE // Session ሲጠፋ መልዕክቶቹም አብረው ይጠፋሉ
+            onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["sessionId"])] // ለፍጥነት ፍለጋ (Search Speed)
+    indices = [Index(value = ["sessionId"])]
 )
 data class MessageEntity(
     @PrimaryKey val id: String,
-    val sessionId: String, // Link to Session
-    val role: String,      // "user" or "model"
+    val sessionId: String,
+    val role: String, // "user" or "model"
     val text: String,
     val timestamp: Long,
-    val attachmentsJson: String // List<Attachment> stored as JSON
+    val attachmentsJson: String, // JSON for List<Attachment>
+    val groundingJson: String?   // JSON for GroundingMetadata (New!)
 )
 
-// --- 3. TYPE CONVERTERS ---
-// Room Database ውስብስብ ነገሮችን (List, Object) ስለማያውቅ ወደ String እንቀይራቸዋለን።
+// --- 3. CONVERTERS (The Bridge) ---
 class CipherTypeConverters {
     private val gson = Gson()
 
