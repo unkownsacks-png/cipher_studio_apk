@@ -26,18 +26,15 @@ class LocalStorageManager @Inject constructor(
         private const val KEY_THEME = "app_theme"
     }
 
-    // --- AUTH & THEME ---
     fun setAuthorized(isAuthorized: Boolean) = prefs.edit().putBoolean(KEY_IS_AUTHORIZED, isAuthorized).apply()
     fun isAuthorized(): Boolean = prefs.getBoolean(KEY_IS_AUTHORIZED, false)
     fun saveTheme(isDark: Boolean) = prefs.edit().putBoolean(KEY_THEME, isDark).apply()
     fun isDarkTheme(): Boolean = prefs.getBoolean(KEY_THEME, true)
 
-    // --- SESSION MANAGEMENT (ROOM) ---
     fun saveSessions(sessions: List<Session>) {
         runBlocking {
             withContext(Dispatchers.IO) {
                 sessions.forEach { session ->
-                    // 1. Save Session
                     val sessionEntity = SessionEntity(
                         id = session.id,
                         title = session.title,
@@ -45,20 +42,18 @@ class LocalStorageManager @Inject constructor(
                         configJson = converters.fromModelConfig(session.config)
                     )
 
-                    // 2. Map Messages
                     val messageEntities = session.history.map { msg ->
                         MessageEntity(
                             id = msg.id ?: java.util.UUID.randomUUID().toString(),
                             sessionId = session.id,
-                            role = msg.role.value, // FIX: Use .value property from your Enum
+                            // FIX: Using .value as per your Enum definition
+                            role = msg.role.value, 
                             text = msg.text,
                             timestamp = msg.timestamp,
                             attachmentsJson = converters.fromAttachmentList(msg.attachments),
                             groundingJson = if (msg.groundingMetadata != null) gson.toJson(msg.groundingMetadata) else null
                         )
                     }
-
-                    // 3. Save to DB
                     cipherDao.saveFullSession(sessionEntity, messageEntities)
                 }
             }
@@ -71,7 +66,6 @@ class LocalStorageManager @Inject constructor(
                 cipherDao.getAllSessions().map { entity ->
                     val messages = cipherDao.getMessagesForSession(entity.id).map { msgEntity ->
                         
-                        // Recover Grounding Metadata
                         val grounding = if (msgEntity.groundingJson != null) {
                             try {
                                 gson.fromJson(msgEntity.groundingJson, GroundingMetadata::class.java)
@@ -80,11 +74,12 @@ class LocalStorageManager @Inject constructor(
 
                         ChatMessage(
                             id = msgEntity.id,
-                            role = ChatRole.fromValue(msgEntity.role), // FIX: Use helper from your Enum
+                            // FIX: Using fromValue helper from your Enum
+                            role = ChatRole.fromValue(msgEntity.role), 
                             text = msgEntity.text,
                             timestamp = msgEntity.timestamp,
                             attachments = converters.toAttachmentList(msgEntity.attachmentsJson),
-                            pinned = false, 
+                            pinned = false,
                             groundingMetadata = grounding
                         )
                     }
@@ -103,10 +98,5 @@ class LocalStorageManager @Inject constructor(
     
     fun clearAll() {
         prefs.edit().clear().apply()
-        runBlocking {
-            withContext(Dispatchers.IO) {
-                // In a real app, you might want a DAO method to nuke tables
-            }
-        }
     }
 }
