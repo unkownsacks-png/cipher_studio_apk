@@ -5,9 +5,9 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
-import com.cipher.studio.domain.model.AppConstants
 import com.cipher.studio.domain.model.Attachment
 import com.cipher.studio.domain.model.ModelConfig
+import com.cipher.studio.domain.model.ModelName
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -17,7 +17,7 @@ data class SessionEntity(
     @PrimaryKey val id: String,
     val title: String,
     val lastModified: Long,
-    val configJson: String // Stores ModelConfig (includes ModelName Enum)
+    val configJson: String
 )
 
 // --- 2. MESSAGE TABLE ---
@@ -36,14 +36,14 @@ data class SessionEntity(
 data class MessageEntity(
     @PrimaryKey val id: String,
     val sessionId: String,
-    val role: String, // We will store ChatRole.value ("user" or "model")
+    val role: String, // Stored as "user" or "model"
     val text: String,
     val timestamp: Long,
-    val attachmentsJson: String, // List<Attachment>
-    val groundingJson: String?   // NEW: For GroundingMetadata
+    val attachmentsJson: String,
+    val groundingJson: String?
 )
 
-// --- 3. CONVERTERS (Critical for fixing the error) ---
+// --- 3. CONVERTERS (Independent) ---
 class CipherTypeConverters {
     private val gson = Gson()
 
@@ -57,7 +57,16 @@ class CipherTypeConverters {
         return try {
             gson.fromJson(json, ModelConfig::class.java)
         } catch (e: Exception) {
-            AppConstants.DEFAULT_CONFIG
+            // FIX: Removed dependency on AppConstants to prevent KAPT crash
+            // We create a fresh default instance here locally.
+            ModelConfig(
+                model = ModelName.FLASH,
+                temperature = 1.0,
+                topK = 64,
+                topP = 0.95,
+                maxOutputTokens = 32000,
+                systemInstruction = "You are a helpful and expert AI assistant."
+            )
         }
     }
 
