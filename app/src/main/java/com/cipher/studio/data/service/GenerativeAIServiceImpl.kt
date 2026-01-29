@@ -32,9 +32,9 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             return@flow
         }
 
-        // 1. Configure Model using your ModelConfig
+        // 1. Configure Model
         val generativeModel = GenerativeModel(
-            modelName = config.model.value, // Access .value from ModelName Enum
+            modelName = config.model.value, // FIX: Use .value from ModelName Enum
             apiKey = apiKey,
             systemInstruction = content { text(config.systemInstruction) },
             generationConfig = generationConfig {
@@ -53,11 +53,10 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
 
         // 2. Build History
         val sdkHistory = mutableListOf<Content>()
-        // Drop last message (current prompt)
         val pastHistory = if (history.isNotEmpty()) history.dropLast(1) else emptyList()
 
         pastHistory.forEach { msg ->
-            val roleStr = if (msg.role == ChatRole.USER) "user" else "model"
+            val roleStr = msg.role.value // FIX: Use .value ("user" or "model")
             
             // Fix User->User collision
             if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user" && roleStr == "user") {
@@ -73,7 +72,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
             })
         }
 
-        // Ensure history ends with model
+        // Ensure history ends with model if sending user prompt
         if (sdkHistory.isNotEmpty() && sdkHistory.last().role == "user") {
             sdkHistory.add(content("model") { text("Ready.") })
         }
@@ -102,7 +101,7 @@ class GenerativeAIServiceImpl @Inject constructor() : GenerativeAIService {
 
     }.catch { e ->
         emit(StreamResult.Error("Critical Error: ${e.message}"))
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.IO) // Keeps it off main thread
 
     private fun base64ToBitmap(base64Str: String): Bitmap? {
         return try {
