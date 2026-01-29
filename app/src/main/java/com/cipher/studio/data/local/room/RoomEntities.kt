@@ -5,22 +5,25 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
+import com.cipher.studio.domain.model.AppConstants
 import com.cipher.studio.domain.model.Attachment
+import com.cipher.studio.domain.model.ChatRole
 import com.cipher.studio.domain.model.ModelConfig
-import com.cipher.studio.domain.model.ModelName
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
-// --- 1. SESSION TABLE ---
+// --- 1. SESSION TABLE (Lightweight) ---
+// ይህ Sidebar ላይ የሚታየውን መረጃ ብቻ ይይዛል።
 @Entity(tableName = "sessions")
 data class SessionEntity(
     @PrimaryKey val id: String,
     val title: String,
     val lastModified: Long,
-    val configJson: String
+    val configJson: String // ModelConfig stored as JSON
 )
 
-// --- 2. MESSAGE TABLE ---
+// --- 2. MESSAGE TABLE (Heavyweight) ---
+// መልዕክቶች እና ምስሎች እዚህ ይቀመጣሉ።
 @Entity(
     tableName = "messages",
     foreignKeys = [
@@ -28,22 +31,22 @@ data class SessionEntity(
             entity = SessionEntity::class,
             parentColumns = ["id"],
             childColumns = ["sessionId"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.CASCADE // Session ሲጠፋ መልዕክቶቹም አብረው ይጠፋሉ
         )
     ],
-    indices = [Index(value = ["sessionId"])]
+    indices = [Index(value = ["sessionId"])] // ለፍጥነት ፍለጋ (Search Speed)
 )
 data class MessageEntity(
     @PrimaryKey val id: String,
-    val sessionId: String,
-    val role: String, // Stored as "user" or "model"
+    val sessionId: String, // Link to Session
+    val role: String,      // "user" or "model"
     val text: String,
     val timestamp: Long,
-    val attachmentsJson: String,
-    val groundingJson: String?
+    val attachmentsJson: String // List<Attachment> stored as JSON
 )
 
-// --- 3. CONVERTERS (Independent) ---
+// --- 3. TYPE CONVERTERS ---
+// Room Database ውስብስብ ነገሮችን (List, Object) ስለማያውቅ ወደ String እንቀይራቸዋለን።
 class CipherTypeConverters {
     private val gson = Gson()
 
@@ -57,16 +60,7 @@ class CipherTypeConverters {
         return try {
             gson.fromJson(json, ModelConfig::class.java)
         } catch (e: Exception) {
-            // FIX: Removed dependency on AppConstants to prevent KAPT crash
-            // We create a fresh default instance here locally.
-            ModelConfig(
-                model = ModelName.FLASH,
-                temperature = 1.0,
-                topK = 64,
-                topP = 0.95,
-                maxOutputTokens = 32000,
-                systemInstruction = "You are a helpful and expert AI assistant."
-            )
+            AppConstants.DEFAULT_CONFIG
         }
     }
 
